@@ -8,8 +8,20 @@ export const users = mysqlTable('users', {
   balance: decimal('balance', { precision: 15, scale: 2 }).notNull().default('0'),
   accountType: varchar('account_type', { length: 20 }).notNull().default('normal'),
   maxSingleDeposit: decimal('max_single_deposit', { precision: 15, scale: 2 }).notNull().default('0'),
+  isActive: int('is_active').notNull().default(0),
+  emailVerifiedAt: timestamp('email_verified_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow().onUpdateNow(),
+});
+
+export const userOtps = mysqlTable('user_otps', {
+  id: varchar('id', { length: 36 }).primaryKey(),
+  userId: varchar('user_id', { length: 36 }).notNull().references(() => users.id),
+  purpose: varchar('purpose', { length: 20 }).notNull(), // register, login
+  codeHash: varchar('code_hash', { length: 255 }).notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+  usedAt: timestamp('used_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
 export const trades = mysqlTable('trades', {

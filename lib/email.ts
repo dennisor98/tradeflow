@@ -1,4 +1,5 @@
 type DepositEmailStatus = 'success' | 'failure';
+type OtpEmailPurpose = 'register' | 'login';
 
 type DepositEmailInput = {
   to: string;
@@ -81,6 +82,49 @@ function buildDepositEmail(input: DepositEmailInput) {
   };
 }
 
+function buildOtpEmail(input: {
+  to: string;
+  name?: string | null;
+  otp: string;
+  purpose: OtpEmailPurpose;
+}) {
+  const greeting = input.name ? `Hello ${input.name},` : 'Hello,';
+  const isLogin = input.purpose === 'login';
+  const title = isLogin ? 'Login verification code' : 'Verify your TradeFlow account';
+  const intro = isLogin
+    ? 'Use the code below to complete your login.'
+    : 'Use the code below to activate your TradeFlow account.';
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
+      <h2>${title}</h2>
+      <p>${greeting}</p>
+      <p>${intro}</p>
+      <p style="font-size: 24px; font-weight: 700; letter-spacing: 6px; margin: 24px 0;">${input.otp}</p>
+      <p>This code expires in 10 minutes.</p>
+      <p>If you did not request this code, please ignore this email.</p>
+    </div>
+  `;
+
+  const text = [
+    title,
+    '',
+    greeting,
+    intro,
+    '',
+    `OTP: ${input.otp}`,
+    'This code expires in 10 minutes.',
+    '',
+    'If you did not request this code, please ignore this email.',
+  ].join('\n');
+
+  return {
+    subject: `TradeFlow ${title}`,
+    html,
+    text,
+  };
+}
+
 export async function sendDepositEmail(input: DepositEmailInput) {
   const { apiKey, fromEmail } = getResendConfig();
 
@@ -112,5 +156,48 @@ export async function sendDepositEmail(input: DepositEmailInput) {
     }
   } catch (error) {
     console.error('Failed to send deposit email:', error);
+  }
+}
+
+export async function sendOtpEmail(input: {
+  to: string;
+  name?: string | null;
+  otp: string;
+  purpose: OtpEmailPurpose;
+}) {
+  const { apiKey, fromEmail } = getResendConfig();
+
+  if (!apiKey || !fromEmail) {
+    console.warn('Skipping OTP email: RESEND_API_KEY or RESEND_FROM_EMAIL is not configured');
+    return { sent: false as const, reason: 'Email service is not configured' };
+  }
+
+  const email = buildOtpEmail(input);
+  try {
+    const response = await fetch(RESEND_API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: input.to,
+        subject: email.subject,
+        html: email.html,
+        text: email.text,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Failed to send OTP email:', errorText);
+      return { sent: false as const, reason: 'Failed to send OTP email' };
+    }
+
+    return { sent: true as const };
+  } catch (error) {
+    console.error('Failed to send OTP email:', error);
+    return { sent: false as const, reason: 'Failed to send OTP email' };
   }
 }

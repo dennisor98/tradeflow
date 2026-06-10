@@ -23,38 +23,36 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Valid email required' }, { status: 400 });
     }
 
-    const user = await db.select().from(users).where(eq(users.email, email)).limit(1);
-    if (user.length === 0) {
+    const foundUser = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    if (foundUser.length === 0) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    if (user[0].isActive !== 1) {
-      return NextResponse.json({
-        error: 'Account not verified. Complete registration OTP first.',
-        needsVerification: true,
-      }, { status: 403 });
+    const user = foundUser[0];
+    if (user.isActive === 1) {
+      return NextResponse.json({ error: 'Account already verified' }, { status: 400 });
     }
 
     const challenge = await createOtpChallenge({
-      userId: user[0].id,
+      userId: user.id,
       email,
-      purpose: 'login',
+      purpose: 'register',
     });
 
     const emailResult = await sendOtpEmail({
       to: email,
-      name: user[0].name,
+      name: user.name,
       otp: challenge.otp,
-      purpose: 'login',
+      purpose: 'register',
     });
 
     if (!emailResult.sent) {
       return NextResponse.json({ error: emailResult.reason }, { status: 500 });
     }
 
-    return NextResponse.json({ message: 'OTP sent to email' }, { status: 200 });
+    return NextResponse.json({ message: 'Verification OTP sent to email' }, { status: 200 });
   } catch (error) {
-    console.error('Login OTP request error:', error);
-    return NextResponse.json({ error: 'Login failed' }, { status: 500 });
+    console.error('Resend verification OTP error:', error);
+    return NextResponse.json({ error: 'Failed to send verification OTP' }, { status: 500 });
   }
 }
