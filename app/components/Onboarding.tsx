@@ -5,10 +5,13 @@ import { useApp } from "../context/AppContext";
 export default function Onboarding() {
   const { navigate, setUser, setUserId } = useApp();
   const [step, setStep] = useState<"welcome" | "register" | "signin" | "verify">("welcome");
+  const [verificationPurpose, setVerificationPurpose] = useState<"register" | "login" | null>(null);
   const [form, setForm] = useState({ name: "", phone: "", email: "" });
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [statusMessage, setStatusMessage] = useState("");
   const [errors, setErrors] = useState<Record<string,string>>({});
   const [loading, setLoading] = useState(false);
+  const [showVerificationOtpButton, setShowVerificationOtpButton] = useState(false);
 
   const validate = () => {
     const e: Record<string,string> = {};
@@ -16,11 +19,8 @@ export default function Onboarding() {
       if (!form.name.trim()) e.name = "Full name required";
       if (!/^\+?[\d\s\-]{10,}$/.test(form.phone)) e.phone = "Valid phone number required";
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = "Valid email required";
-    } else {
-      if (!/^\+?[\d\s\-]{10,}$/.test(form.phone) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-        e.phone = "Valid phone or email required";
-        e.email = "Valid phone or email required";
-      }
+    } else if (step === "signin") {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = "Valid email required";
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -28,33 +28,72 @@ export default function Onboarding() {
 
   const handleSubmit = async () => {
     if (!validate()) return;
+    setErrors({});
+    setStatusMessage("");
+    setShowVerificationOtpButton(false);
     setLoading(true);
     try {
       if (step === "register") {
         const res = await fetch('/api/users/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(form),
+          body: JSON.stringify({ name: form.name, phone: form.phone, email: form.email }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Registration failed');
-        setUserId(data.user.id);
-        setUser(form);
+        setVerificationPurpose("register");
+        setOtp(["", "", "", "", "", ""]);
+        setStatusMessage(data.message || "OTP sent to your email");
         setStep("verify");
       } else {
         const res = await fetch('/api/users/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: form.phone, email: form.email }),
+          body: JSON.stringify({ email: form.email }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Login failed');
-        setUserId(data.user.id);
-        setUser({ name: data.user.name, phone: data.user.phone, email: data.user.email });
-        navigate("dashboard");
+        if (!res.ok) {
+          setShowVerificationOtpButton(res.status === 403 && data.needsVerification === true);
+          throw new Error(data.error || 'Login failed');
+        }
+        setVerificationPurpose("login");
+        setOtp(["", "", "", "", "", ""]);
+        setStatusMessage(data.message || "OTP sent to your email");
+        setStep("verify");
       }
     } catch (error) {
       console.error('Auth error:', error);
+      setErrors({ email: (error as Error).message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendVerificationOtp = async () => {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      setErrors({ email: "Valid email required" });
+      return;
+    }
+
+    setLoading(true);
+    setErrors({});
+    setStatusMessage("");
+    try {
+      const res = await fetch('/api/users/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: form.email }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send verification OTP');
+
+      setVerificationPurpose("register");
+      setOtp(["", "", "", "", "", ""]);
+      setShowVerificationOtpButton(false);
+      setStatusMessage(data.message || "Verification OTP sent to your email");
+      setStep("verify");
+    } catch (error) {
+      console.error('Send verification OTP error:', error);
       setErrors({ email: (error as Error).message });
     } finally {
       setLoading(false);
@@ -72,8 +111,77 @@ export default function Onboarding() {
     }
   };
 
-  const handleVerify = () => {
-    navigate("dashboard");
+  const handleVerify = async () => {
+    const code = otp.join("");
+    if (!verificationPurpose) {
+      setErrors({ otp: "No active verification request" });
+      return;
+    }
+
+    if (!/^\d{6}$/.test(code)) {
+      setErrors({ otp: "Enter the 6-digit OTP code" });
+      return;
+    }
+
+    setLoading(true);
+    setErrors({});
+    setStatusMessage("");
+    try {
+      const res = await fetch('/api/users/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: form.email,
+          otp: code,
+          purpose: verificationPurpose,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'OTP verification failed');
+
+      setUserId(data.user.id);
+      setUser({
+        name: data.user.name,
+        phone: data.user.phone,
+        email: data.user.email,
+      });
+      navigate("dashboard");
+    } catch (error) {
+      console.error('Verification error:', error);
+      setErrors({ otp: (error as Error).message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (!verificationPurpose) return;
+
+    setLoading(true);
+    setErrors({});
+    try {
+      const endpoint = verificationPurpose === "register"
+        ? "/api/users/resend-verification"
+        : "/api/users/login";
+      const payload = { email: form.email };
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to resend OTP');
+
+      setOtp(["", "", "", "", "", ""]);
+      setStatusMessage(data.message || "A new OTP has been sent to your email");
+    } catch (error) {
+      console.error('Resend OTP error:', error);
+      setErrors({ otp: (error as Error).message });
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (step === "welcome") return (
@@ -146,8 +254,12 @@ export default function Onboarding() {
             <p style={{ fontSize: 12, color: "var(--warning)", lineHeight: 1.5 }}>⚠️ Binary options trading involves significant risk. Only trade with money you can afford to lose. You must be 18+ to trade.</p>
           </div>
 
-          <button onClick={handleSubmit} style={{ padding: "15px", background: "var(--accent)", color: "white", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: "pointer", marginTop: 4 }}>
-            Continue
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            style={{ padding: "15px", background: "var(--accent)", color: "white", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: loading ? "wait" : "pointer", marginTop: 4, opacity: loading ? 0.8 : 1 }}
+          >
+            {loading ? "Sending OTP..." : "Continue"}
           </button>
           <p style={{ marginTop: 16, fontSize: 13, color: "var(--text-muted)", textAlign: "center" }}>Already have an account? <span style={{ color: "var(--accent)", cursor: "pointer", fontWeight: 500 }} onClick={() => setStep("signin")}>Sign In</span></p>
         </div>
@@ -166,26 +278,35 @@ export default function Onboarding() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div>
-            <label style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Email or Phone</label>
+            <label style={{ fontSize: 13, fontWeight: 500, color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>Email Address</label>
             <input
-              type="text"
-              placeholder="john@example.com or +254 712 345 678"
-              value={form.email || form.phone}
-              onChange={e => {
-                const val = e.target.value;
-                setForm(p => ({ ...p, email: val, phone: val }));
-              }}
-              style={{ width: "100%", padding: "13px 16px", border: `1px solid ${errors.email || errors.phone ? "var(--danger)" : "var(--border)"}`, borderRadius: "var(--radius-sm)", fontSize: 15, outline: "none", background: "var(--surface)", color: "var(--text-primary)", fontFamily: "inherit", transition: "border-color 0.15s" }}
+              type="email"
+              placeholder="john@example.com"
+              value={form.email}
+              onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+              style={{ width: "100%", padding: "13px 16px", border: `1px solid ${errors.email ? "var(--danger)" : "var(--border)"}`, borderRadius: "var(--radius-sm)", fontSize: 15, outline: "none", background: "var(--surface)", color: "var(--text-primary)", fontFamily: "inherit", transition: "border-color 0.15s" }}
               onFocus={e => e.target.style.borderColor = "var(--accent)"}
-              onBlur={e => e.target.style.borderColor = errors.email || errors.phone ? "var(--danger)" : "var(--border)"}
+              onBlur={e => e.target.style.borderColor = errors.email ? "var(--danger)" : "var(--border)"}
             />
-            {(errors.email || errors.phone) && <p style={{ fontSize: 12, color: "var(--danger)", marginTop: 4 }}>{errors.email || errors.phone}</p>}
+            {errors.email && <p style={{ fontSize: 12, color: "var(--danger)", marginTop: 4 }}>{errors.email}</p>}
           </div>
-
-          <button onClick={handleSubmit} style={{ padding: "15px", background: "var(--accent)", color: "white", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: "pointer", marginTop: 4 }}>
-            Sign In
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            style={{ padding: "15px", background: "var(--accent)", color: "white", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: loading ? "wait" : "pointer", marginTop: 4, opacity: loading ? 0.8 : 1 }}
+          >
+            {loading ? "Sending OTP..." : "Sign In"}
           </button>
-          <p style={{ marginTop: 16, fontSize: 13, color: "var(--text-muted)", textAlign: "center" }}>Don't have an account? <span style={{ color: "var(--accent)", cursor: "pointer", fontWeight: 500 }} onClick={() => setStep("register")}>Create Account</span></p>
+          {showVerificationOtpButton && (
+            <button
+              onClick={handleSendVerificationOtp}
+              disabled={loading}
+              style={{ padding: "14px", background: "transparent", color: "var(--accent)", border: "1px solid var(--accent)", borderRadius: "var(--radius)", fontSize: 14, fontWeight: 600, cursor: loading ? "wait" : "pointer", marginTop: -4, opacity: loading ? 0.8 : 1 }}
+            >
+              {loading ? "Sending verification OTP..." : "Send verification OTP"}
+            </button>
+          )}
+          <p style={{ marginTop: 16, fontSize: 13, color: "var(--text-muted)", textAlign: "center" }}>Don&apos;t have an account? <span style={{ color: "var(--accent)", cursor: "pointer", fontWeight: 500 }} onClick={() => setStep("register")}>Create Account</span></p>
         </div>
       </div>
     </div>
@@ -197,9 +318,13 @@ export default function Onboarding() {
         <div style={{ width: 64, height: 64, borderRadius: "50%", background: "var(--accent-light)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px" }}>
           <span style={{ fontSize: 28 }}>📱</span>
         </div>
-        <h2 style={{ fontSize: 26, fontWeight: 700, marginBottom: 8 }}>Verify Your Phone</h2>
+        <h2 style={{ fontSize: 26, fontWeight: 700, marginBottom: 8 }}>
+          {verificationPurpose === "login" ? "Verify Login" : "Verify Your Email"}
+        </h2>
         <p style={{ color: "var(--text-secondary)", marginBottom: 8, fontSize: 15 }}>Enter the 6-digit code sent to</p>
-        <p style={{ fontWeight: 600, color: "var(--accent)", marginBottom: 36, fontSize: 15 }}>{form.phone}</p>
+        <p style={{ fontWeight: 600, color: "var(--accent)", marginBottom: 20, fontSize: 15 }}>{form.email}</p>
+        {statusMessage && <p style={{ fontSize: 13, color: "var(--accent)", marginBottom: 14 }}>{statusMessage}</p>}
+        {errors.otp && <p style={{ fontSize: 13, color: "var(--danger)", marginBottom: 14 }}>{errors.otp}</p>}
 
         <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 32 }}>
           {otp.map((digit, i) => (
@@ -217,15 +342,15 @@ export default function Onboarding() {
 
         <button
           onClick={handleVerify}
-          disabled={otp.some(d => !d)}
-          style={{ width: "100%", padding: "15px", background: otp.every(d => d) ? "var(--accent)" : "var(--border)", color: otp.every(d => d) ? "white" : "var(--text-muted)", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: otp.every(d => d) ? "pointer" : "not-allowed", transition: "all 0.2s" }}
+          disabled={loading || otp.some(d => !d)}
+          style={{ width: "100%", padding: "15px", background: otp.every(d => d) ? "var(--accent)" : "var(--border)", color: otp.every(d => d) ? "white" : "var(--text-muted)", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: loading ? "wait" : otp.every(d => d) ? "pointer" : "not-allowed", transition: "all 0.2s" }}
         >
-          Verify & Enter Platform
+          {loading ? "Verifying..." : "Verify & Enter Platform"}
         </button>
         <p style={{ marginTop: 16, fontSize: 13, color: "var(--text-muted)" }}>
-          Didn't receive code? <span style={{ color: "var(--accent)", cursor: "pointer", fontWeight: 500 }}>Resend in 0:45</span>
+          Didn&apos;t receive code? <span style={{ color: "var(--accent)", cursor: "pointer", fontWeight: 500 }} onClick={handleResendOtp}>Resend code</span>
         </p>
-        <p style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>Demo: enter any 6 digits to proceed</p>
+        <p style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>Code expires in 10 minutes.</p>
       </div>
     </div>
   );
