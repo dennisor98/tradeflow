@@ -4,8 +4,8 @@ import DatabaseInit from "./components/DatabaseInit";
 import CryptoAddressInit from "./components/CryptoAddressInit";
 
 export const metadata: Metadata = {
-  title: "TradeFlow — Binary Trading",
-  description: "Professional binary options trading platform",
+  title: "TradeFlow — Crypto Trading",
+  description: "Professional crypto trading platform",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -1,0 +1,64 @@
+<svg width="1600" height="1200" viewBox="0 0 1600 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="800" y1="0" x2="800" y2="1200" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F9FAFC"/>
+      <stop offset="1" stop-color="#EEF3F8"/>
+    </linearGradient>
+    <linearGradient id="lineA" x1="70" y1="820" x2="1530" y2="820" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B7E3D0"/>
+      <stop offset="1" stop-color="#9BC6F3"/>
+    </linearGradient>
+    <linearGradient id="lineB" x1="110" y1="700" x2="1490" y2="700" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B5D8F8"/>
+      <stop offset="1" stop-color="#B4E6CF"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1210 270) rotate(90) scale(360 500)">
+      <stop stop-color="#B7D4F4" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#B7D4F4" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1600" height="1200" fill="url(#bg)"/>
+  <rect width="1600" height="1200" fill="url(#glow)"/>
+
+  <g opacity="0.42" stroke="#D5DEE8" stroke-width="1">
+    <path d="M0 230H1600"/>
+    <path d="M0 370H1600"/>
+    <path d="M0 510H1600"/>
+    <path d="M0 650H1600"/>
+    <path d="M0 790H1600"/>
+    <path d="M0 930H1600"/>
+    <path d="M210 0V1200"/>
+    <path d="M430 0V1200"/>
+    <path d="M650 0V1200"/>
+    <path d="M870 0V1200"/>
+    <path d="M1090 0V1200"/>
+    <path d="M1310 0V1200"/>
+  </g>
+
+  <path d="M70 855C150 820 240 720 330 690C430 655 480 725 560 700C650 672 710 570 790 548C900 516 960 598 1045 572C1135 545 1215 430 1310 410C1385 395 1460 430 1530 392" stroke="url(#lineA)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M110 745C190 770 260 690 355 680C435 672 520 722 600 710C675 700 725 620 790 598C880 566 970 628 1060 600C1140 576 1225 500 1305 482C1380 465 1445 490 1490 525" stroke="url(#lineB)" stroke-width="6" stroke-linecap="round"/>
+
+  <g opacity="0.55">
+    <rect x="220" y="610" width="20" height="170" rx="7" fill="#CCEBDC"/>
+    <rect x="270" y="560" width="20" height="240" rx="7" fill="#C3E3F8"/>
+    <rect x="320" y="635" width="20" height="155" rx="7" fill="#CCEBDC"/>
+    <rect x="370" y="600" width="20" height="185" rx="7" fill="#C3E3F8"/>
+    <rect x="420" y="545" width="20" height="255" rx="7" fill="#CCEBDC"/>
+    <rect x="470" y="590" width="20" height="195" rx="7" fill="#C3E3F8"/>
+    <rect x="520" y="655" width="20" height="130" rx="7" fill="#CCEBDC"/>
+  </g>
+
+  <g opacity="0.8">
+    <circle cx="1190" cy="300" r="84" fill="#E4F1FB"/>
+    <circle cx="1340" cy="390" r="58" fill="#E6F5ED"/>
+    <circle cx="1080" cy="435" r="46" fill="#EEF5FD"/>
+    <circle cx="1280" cy="570" r="34" fill="#EAF7F1"/>
+  </g>
+
+  <g opacity="0.56" fill="#7B93B4" font-family="Arial, sans-serif" font-weight="700">
+    <text x="1165" y="312" font-size="48">₿</text>
+    <text x="1324" y="399" font-size="34">Ξ</text>
+    <text x="1068" y="442" font-size="26">◎</text>
+  </g>
+</svg>

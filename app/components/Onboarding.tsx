@@ -185,8 +185,11 @@ export default function Onboarding() {
   };
 
   if (step === "welcome") return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)", padding: "24px" }}>
-      <div style={{ maxWidth: 440, width: "100%", textAlign: "center" }}>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)", padding: "24px", position: "relative", overflow: "hidden" }}>
+      <div style={{ position: "absolute", inset: 0, backgroundImage: "url('/crypto-platform-bg.svg')", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.3, pointerEvents: "none" }} />
+      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(248,247,244,0.86) 0%, rgba(248,247,244,0.94) 40%, rgba(248,247,244,0.98) 100%)", pointerEvents: "none" }} />
+
+      <div style={{ maxWidth: 440, width: "100%", textAlign: "center", position: "relative", zIndex: 1 }}>
         <div style={{ width: 72, height: 72, borderRadius: 20, background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 28px", boxShadow: "0 8px 24px rgba(26,107,60,0.25)" }}>
           <svg width="36" height="36" fill="none" viewBox="0 0 36 36">
             <path d="M18 4L32 12V24L18 32L4 24V12L18 4Z" stroke="white" strokeWidth="2" fill="rgba(255,255,255,0.15)" />
@@ -194,15 +197,15 @@ export default function Onboarding() {
           </svg>
         </div>
         <h1 style={{ fontSize: 36, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.5px", marginBottom: 12 }}>TradeFlow</h1>
-        <p style={{ fontSize: 16, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 48 }}>Professional binary options trading. Over/Under strategies. Real-time signals.</p>
+        <p style={{ fontSize: 16, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 48 }}>Professional Crypto trading. High profits rate. Real-time signals.</p>
         
         <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 32 }}>
           {[
-            { icon: "📈", label: "Over & Under strategies", desc: "Simple, powerful directional trades" },
-            { icon: "⚡", label: "Real-time market data", desc: "Live prices across major assets" },
+            { icon: "📈", label: "Short Time Trading Slots with High Winning Rate", desc: "Simple, powerful directional trades" },
+            { icon: "₿", label: "Crypto-focused market intelligence", desc: "Spot opportunities across top digital assets" },
             { icon: "🔒", label: "Secure & regulated", desc: "Bank-grade security standards" },
           ].map((f) => (
-            <div key={f.label} style={{ display: "flex", alignItems: "center", gap: 14, background: "var(--surface)", borderRadius: "var(--radius)", border: "1px solid var(--border)", padding: "14px 18px", textAlign: "left" }}>
+            <div key={f.label} style={{ display: "flex", alignItems: "center", gap: 14, background: "var(--surface)", borderRadius: "var(--radius)", border: "1px solid var(--border)", padding: "14px 18px", textAlign: "left", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
               <span style={{ fontSize: 24 }}>{f.icon}</span>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{f.label}</div>
@@ -251,7 +254,7 @@ export default function Onboarding() {
           ))}
 
           <div style={{ background: "var(--warning-light)", borderRadius: "var(--radius-sm)", padding: "12px 14px", border: "1px solid #f0d080" }}>
-            <p style={{ fontSize: 12, color: "var(--warning)", lineHeight: 1.5 }}>⚠️ Binary options trading involves significant risk. Only trade with money you can afford to lose. You must be 18+ to trade.</p>
+            <p style={{ fontSize: 12, color: "var(--warning)", lineHeight: 1.5 }}>⚠️ Trading involves significant risk. Only trade with money you can afford to lose. You must be 18+ to trade.</p>
           </div>
 
           <button
@@ -331,7 +334,7 @@ export default function Onboarding() {
             <input
               key={i}
               id={`otp-${i}`}
-              type="text"
+              type="number"
               maxLength={1}
               value={digit}
               onChange={e => handleOtp(i, e.target.value)}
