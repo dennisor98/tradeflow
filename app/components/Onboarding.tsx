@@ -334,7 +334,9 @@ export default function Onboarding() {
             <input
               key={i}
               id={`otp-${i}`}
-              type="number"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               maxLength={1}
               value={digit}
               onChange={e => handleOtp(i, e.target.value)}
