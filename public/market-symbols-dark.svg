@@ -1,0 +1,61 @@
+<svg width="480" height="480" viewBox="0 0 480 480" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    Seamlessly tileable market texture for dark surfaces.
+    Symbols are drawn as paths (not <text>) so they render identically
+    regardless of which fonts the viewer has installed.
+    All marks are inset from the tile edges so repeats never clip a glyph.
+  -->
+  <defs>
+    <g id="btc" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="24" cy="24" r="21" stroke-width="2"/>
+      <path d="M17 13V35" stroke-width="2"/>
+      <path d="M17 13h9.5a5 5 0 0 1 0 10H17" stroke-width="2"/>
+      <path d="M17 23h11a6 6 0 0 1 0 12H17" stroke-width="2"/>
+      <path d="M21 9v4M26.5 9v4M21 35v4M26.5 35v4" stroke-width="2"/>
+    </g>
+    <g id="usd" fill="none" stroke-linecap="round">
+      <path d="M32 16c0-4-3.6-6.5-8-6.5S16 12 16 16.5C16 25 32.5 22 32.5 30.5 32.5 35 29 38 24 38s-8.5-3-8.5-7" stroke-width="2"/>
+      <path d="M24 5v38" stroke-width="2"/>
+    </g>
+    <g id="candles" fill="none" stroke-linecap="round">
+      <path d="M6 2v26M22 8v28M38 0v24M54 6v30" stroke-width="1.5"/>
+      <rect x="1" y="8" width="10" height="13" rx="1.5" stroke-width="1.5"/>
+      <rect x="17" y="14" width="10" height="16" rx="1.5" stroke-width="1.5"/>
+      <rect x="33" y="5" width="10" height="12" rx="1.5" stroke-width="1.5"/>
+      <rect x="49" y="13" width="10" height="17" rx="1.5" stroke-width="1.5"/>
+    </g>
+  </defs>
+
+  <!-- terminal grid: lines sit on 0 and multiples of 120 so repeats line up -->
+  <g stroke="#4c7f63" stroke-width="1" opacity="0.16">
+    <path d="M0 0V480M120 0V480M240 0V480M360 0V480"/>
+    <path d="M0 0H480M0 120H480M0 240H480M0 360H480"/>
+  </g>
+
+  <!-- bitcoin marks, warm gold -->
+  <g stroke="#e0a83a">
+    <use href="#btc" transform="translate(40 46) scale(1.5)" opacity="0.5"/>
+    <use href="#btc" transform="translate(296 150)" opacity="0.34"/>
+    <use href="#btc" transform="translate(140 330) scale(1.2)" opacity="0.42"/>
+    <use href="#btc" transform="translate(378 374) scale(0.8)" opacity="0.28"/>
+  </g>
+
+  <!-- dollar marks, platform green -->
+  <g stroke="#4fc98a">
+    <use href="#usd" transform="translate(250 40) scale(1.2)" opacity="0.4"/>
+    <use href="#usd" transform="translate(56 210) scale(1.5)" opacity="0.5"/>
+    <use href="#usd" transform="translate(350 252)" opacity="0.32"/>
+    <use href="#usd" transform="translate(196 418) scale(0.7)" opacity="0.26"/>
+  </g>
+
+  <!-- candlestick clusters -->
+  <g stroke="#7fd7a6">
+    <use href="#candles" transform="translate(214 214)" opacity="0.3"/>
+    <use href="#candles" transform="translate(384 62) scale(0.8)" opacity="0.24"/>
+    <use href="#candles" transform="translate(28 400) scale(0.9)" opacity="0.22"/>
+  </g>
+
+  <!-- a drifting trend line tying the field together -->
+  <path d="M0 300 L60 268 L120 286 L180 232 L240 254 L300 196 L360 218 L420 172 L480 190"
+        stroke="#4fc98a" stroke-width="1.5" opacity="0.22" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

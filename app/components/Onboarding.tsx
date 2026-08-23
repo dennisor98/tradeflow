@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useApp } from "../context/AppContext";
+import WelcomeHome from "./WelcomeHome";
 
 export default function Onboarding() {
   const { navigate, setUser, setUserId } = useApp();
@@ -185,42 +186,10 @@ export default function Onboarding() {
   };
 
   if (step === "welcome") return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)", padding: "24px", position: "relative", overflow: "hidden" }}>
-      <div style={{ position: "absolute", inset: 0, backgroundImage: "url('/crypto-platform-bg.svg')", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.3, pointerEvents: "none" }} />
-      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(248,247,244,0.86) 0%, rgba(248,247,244,0.94) 40%, rgba(248,247,244,0.98) 100%)", pointerEvents: "none" }} />
-
-      <div style={{ maxWidth: 440, width: "100%", textAlign: "center", position: "relative", zIndex: 1 }}>
-        <div style={{ width: 72, height: 72, borderRadius: 20, background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 28px", boxShadow: "0 8px 24px rgba(26,107,60,0.25)" }}>
-          <svg width="36" height="36" fill="none" viewBox="0 0 36 36">
-            <path d="M18 4L32 12V24L18 32L4 24V12L18 4Z" stroke="white" strokeWidth="2" fill="rgba(255,255,255,0.15)" />
-            <path d="M12 20L16 24L24 14" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </div>
-        <h1 style={{ fontSize: 36, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.5px", marginBottom: 12 }}>TradeFlow</h1>
-        <p style={{ fontSize: 16, color: "var(--text-secondary)", lineHeight: 1.6, marginBottom: 48 }}>Professional Crypto trading. High profits rate. Real-time signals.</p>
-        
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 32 }}>
-          {[
-            { icon: "📈", label: "Short Time Trading Slots with High Winning Rate", desc: "Simple, powerful directional trades" },
-            { icon: "₿", label: "Crypto-focused market intelligence", desc: "Spot opportunities across top digital assets" },
-            { icon: "🔒", label: "Secure & regulated", desc: "Bank-grade security standards" },
-          ].map((f) => (
-            <div key={f.label} style={{ display: "flex", alignItems: "center", gap: 14, background: "var(--surface)", borderRadius: "var(--radius)", border: "1px solid var(--border)", padding: "14px 18px", textAlign: "left", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-              <span style={{ fontSize: 24 }}>{f.icon}</span>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{f.label}</div>
-                <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>{f.desc}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <button onClick={() => setStep("register")} style={{ width: "100%", padding: "16px", background: "var(--accent)", color: "white", border: "none", borderRadius: "var(--radius)", fontSize: 16, fontWeight: 600, cursor: "pointer", boxShadow: "0 4px 14px rgba(26,107,60,0.3)" }}>
-          Get Started
-        </button>
-        <p style={{ marginTop: 16, fontSize: 13, color: "var(--text-muted)" }}>Already have an account? <span style={{ color: "var(--accent)", cursor: "pointer", fontWeight: 500 }} onClick={() => setStep("signin")}>Sign In</span></p>
-      </div>
-    </div>
+    <WelcomeHome
+      onCreateAccount={() => setStep("register")}
+      onSignIn={() => setStep("signin")}
+    />
   );
 
   if (step === "register") return (
@@ -230,7 +199,7 @@ export default function Onboarding() {
           ← Back
         </button>
         <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8, letterSpacing: "-0.3px" }}>Create Account</h2>
-        <p style={{ color: "var(--text-secondary)", marginBottom: 32, fontSize: 15 }}>Join thousands of traders on TradeFlow</p>
+        <p style={{ color: "var(--text-secondary)", marginBottom: 32, fontSize: 15 }}>Join thousands of traders on Wintradein</p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {[
@@ -253,14 +222,14 @@ export default function Onboarding() {
             </div>
           ))}
 
-          <div style={{ background: "var(--warning-light)", borderRadius: "var(--radius-sm)", padding: "12px 14px", border: "1px solid #f0d080" }}>
+          <div style={{ background: "var(--warning-light)", borderRadius: "var(--radius-sm)", padding: "12px 14px", border: "1px solid var(--warning)" }}>
             <p style={{ fontSize: 12, color: "var(--warning)", lineHeight: 1.5 }}>⚠️ Trading involves significant risk. Only trade with money you can afford to lose. You must be 18+ to trade.</p>
           </div>
 
           <button
             onClick={handleSubmit}
             disabled={loading}
-            style={{ padding: "15px", background: "var(--accent)", color: "white", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: loading ? "wait" : "pointer", marginTop: 4, opacity: loading ? 0.8 : 1 }}
+            style={{ padding: "15px", background: "var(--accent)", color: "var(--on-accent)", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: loading ? "wait" : "pointer", marginTop: 4, opacity: loading ? 0.8 : 1 }}
           >
             {loading ? "Sending OTP..." : "Continue"}
           </button>
@@ -277,7 +246,7 @@ export default function Onboarding() {
           ← Back
         </button>
         <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8, letterSpacing: "-0.3px" }}>Welcome Back</h2>
-        <p style={{ color: "var(--text-secondary)", marginBottom: 32, fontSize: 15 }}>Sign in to your TradeFlow account</p>
+        <p style={{ color: "var(--text-secondary)", marginBottom: 32, fontSize: 15 }}>Sign in to your Wintradein account</p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div>
@@ -296,7 +265,7 @@ export default function Onboarding() {
           <button
             onClick={handleSubmit}
             disabled={loading}
-            style={{ padding: "15px", background: "var(--accent)", color: "white", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: loading ? "wait" : "pointer", marginTop: 4, opacity: loading ? 0.8 : 1 }}
+            style={{ padding: "15px", background: "var(--accent)", color: "var(--on-accent)", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: loading ? "wait" : "pointer", marginTop: 4, opacity: loading ? 0.8 : 1 }}
           >
             {loading ? "Sending OTP..." : "Sign In"}
           </button>
@@ -348,7 +317,7 @@ export default function Onboarding() {
         <button
           onClick={handleVerify}
           disabled={loading || otp.some(d => !d)}
-          style={{ width: "100%", padding: "15px", background: otp.every(d => d) ? "var(--accent)" : "var(--border)", color: otp.every(d => d) ? "white" : "var(--text-muted)", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: loading ? "wait" : otp.every(d => d) ? "pointer" : "not-allowed", transition: "all 0.2s" }}
+          style={{ width: "100%", padding: "15px", background: otp.every(d => d) ? "var(--accent)" : "var(--border)", color: otp.every(d => d) ? "var(--on-accent)" : "var(--text-muted)", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: loading ? "wait" : otp.every(d => d) ? "pointer" : "not-allowed", transition: "all 0.2s" }}
         >
           {loading ? "Verifying..." : "Verify & Enter Platform"}
         </button>

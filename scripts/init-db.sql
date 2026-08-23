@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS users (
   phone VARCHAR(255) NOT NULL,
   email VARCHAR(255) NOT NULL,
   balance DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
+  role VARCHAR(20) NOT NULL DEFAULT 'user',
+  password_hash VARCHAR(255) NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 0,
   email_verified_at TIMESTAMP NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -65,3 +67,17 @@ CREATE TABLE IF NOT EXISTS transactions (
   INDEX idx_created_at (created_at),
   INDEX idx_type (type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Append-only record of every administrative action.
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+  id VARCHAR(36) PRIMARY KEY,
+  admin_id VARCHAR(36) NOT NULL,
+  admin_email VARCHAR(255) NOT NULL,
+  action VARCHAR(60) NOT NULL,
+  target_user_id VARCHAR(36),
+  target_user_email VARCHAR(255),
+  details TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_created_at (created_at),
+  INDEX idx_target_user (target_user_id)
+);

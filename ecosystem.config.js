@@ -4,7 +4,7 @@ module.exports = {
 
     {
 
-      name: "tradeflow",
+      name: "wintradein",
 
       script: "npm",
 

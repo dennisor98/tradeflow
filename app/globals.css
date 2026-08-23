@@ -1,39 +1,113 @@
 @import "tailwindcss";
 
+/*
+ * Dark green theme.
+ *
+ * Surfaces climb from near-black green (--bg) through --surface to --surface-2,
+ * so depth reads as "lighter", the way it does in a trading terminal.
+ *
+ * Note --accent is bright enough to sit on dark backgrounds, which means white
+ * text on an accent fill fails contrast (2.7:1). Use --on-accent for text and
+ * icons that sit on top of an accent-filled element.
+ */
 :root {
-  --bg: #f8f7f4;
-  --surface: #ffffff;
-  --surface-2: #f2f1ee;
-  --border: #e4e2dc;
-  --border-strong: #d0cec6;
-  --text-primary: #1a1917;
-  --text-secondary: #6b6860;
-  --text-muted: #9b9891;
-  --accent: #1a6b3c;
-  --accent-light: #e8f5ee;
+  --bg: #071310;
+  --surface: #0e1f19;
+  --surface-2: #152b22;
+  --border: #1e3d2f;
+  --border-strong: #2c5742;
+
+  --text-primary: #e8f2ec;
+  --text-secondary: #9db3a7;
+  --text-muted: #7d9488;
+
+  --accent: #37b26d;
+  --on-accent: #05140d;
+  --accent-light: #12291e;
   --accent-mid: #2d9459;
-  --danger: #c0392b;
-  --danger-light: #fdf0ee;
+
+  --danger: #f87171;
+  --danger-light: #2a1517;
   --danger-mid: #e74c3c;
-  --warning: #d68910;
-  --warning-light: #fef9e7;
-  --gold: #b7860b;
-  --up: #16a34a;
-  --down: #dc2626;
-  --up-bg: #dcfce7;
-  --down-bg: #fee2e2;
+  --warning: #e6b455;
+  --warning-light: #2b2314;
+  --gold: #e0a83a;
+
+  --up: #4ade80;
+  --down: #f87171;
+  --up-bg: #10301f;
+  --down-bg: #331719;
+
   --radius: 12px;
   --radius-sm: 8px;
   --radius-lg: 16px;
-  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+
+  /* Shadows have to be near-black to register against dark surfaces. */
+  --shadow: 0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-md: 0 6px 18px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.4);
+
+  /* Ink surfaces — the deepest layer, used by the home hero and admin chrome. */
+  --ink: #050f0c;
+  --ink-2: #0b1a14;
+  --ink-line: rgba(255,255,255,0.09);
+  --on-ink: #e8f2ec;
+  --on-ink-muted: #9db3a7;
+  --accent-bright: #4ec684;
+  --gold-bright: #e0a83a;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { background: var(--bg); color-scheme: dark; }
 
 body {
   background: var(--bg);
   color: var(--text-primary);
   font-family: 'DM Sans', -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Form controls default to a light UA palette otherwise. */
+input, select, textarea, button { color-scheme: dark; }
+
+input::placeholder, textarea::placeholder { color: var(--text-muted); }
+
+/* Native select dropdown lists are drawn by the OS; force legible colours. */
+select option { background: var(--surface); color: var(--text-primary); }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-mid); }
+
+/*
+ * App shell measure.
+ *
+ * The consumer screens are mobile-first. On a wide window a 480px column
+ * stranded in the middle of a full-bleed header and nav reads as broken, so
+ * the measure widens on desktop and the bars align to it.
+ *
+ * .app-bar centres a full-bleed bar's *contents* using side padding rather
+ * than an inner wrapper, so the bar's background still runs edge to edge.
+ * Elements using it must not set horizontal padding inline — inline styles
+ * win over classes.
+ */
+.app-shell {
+  width: 100%;
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.app-bar {
+  padding-left: max(16px, calc((100% - 480px) / 2));
+  padding-right: max(16px, calc((100% - 480px) / 2));
+}
+
+@media (min-width: 900px) {
+  .app-shell { max-width: 780px; }
+  .app-bar {
+    padding-left: max(20px, calc((100% - 780px) / 2));
+    padding-right: max(20px, calc((100% - 780px) / 2));
+  }
 }

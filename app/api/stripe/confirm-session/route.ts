@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { transactions, users } from '@/lib/schema';
 import { sendDepositEmail } from '@/lib/email';
 import { getStripeClient } from '@/lib/stripe';
+import { getSettings, resolveAccountType } from '@/lib/settings';
 
 type UserBalanceUpdate = {
   balance: string;
@@ -66,11 +67,8 @@ export async function GET(request: Request) {
       maxSingleDeposit: newMaxDeposit.toFixed(2),
     };
 
-    if (newMaxDeposit >= 5000 && user.accountType !== 'vvip') {
-      updates.accountType = 'vvip';
-    } else if (newMaxDeposit >= 1000 && user.accountType === 'normal') {
-      updates.accountType = 'vip';
-    }
+    const promotion = resolveAccountType(newMaxDeposit, user.accountType, await getSettings());
+    if (promotion) updates.accountType = promotion;
 
     await db.update(users).set(updates).where(eq(users.id, userId));
 

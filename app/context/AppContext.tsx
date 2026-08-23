@@ -23,8 +23,26 @@ export interface Transaction {
   type: "deposit" | "withdrawal" | "trade_win" | "trade_loss";
   amount: number | string;
   time: number;
-  status: "completed" | "pending";
+  status: "completed" | "pending" | "failed";
   label: string;
+}
+
+/** Admin-configured platform values, served by /api/settings. */
+export interface PlatformSettings {
+  usdToKesRate: number;
+  minDepositUsd: number;
+  vipThresholdUsd: number;
+  vvipThresholdUsd: number;
+  winRateNormal: number;
+  winRateVip: number;
+  winRateVvip: number;
+}
+
+/** The win rate, as a percentage, that a given tier trades at. */
+export function winRateFor(tier: string, settings: PlatformSettings) {
+  return tier === "vvip" ? settings.winRateVvip
+    : tier === "vip" ? settings.winRateVip
+    : settings.winRateNormal;
 }
 
 interface AppState {
@@ -37,6 +55,8 @@ interface AppState {
   trades: Trade[];
   transactions: Transaction[];
   loading: boolean;
+  /** Null until the first fetch lands; screens must handle that. */
+  settings: PlatformSettings | null;
   navigate: (s: Screen) => void;
   setUser: (u: AppState["user"]) => void;
   setUserId: (id: string) => void;
@@ -59,6 +79,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
+  const [settings, setSettings] = useState<PlatformSettings | null>(null);
+
+  // Fetched once for the whole app — the deposit, trading, profile, dashboard
+  // and home screens all read the same snapshot rather than each polling.
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d) setSettings(d); })
+      .catch(error => console.error('Failed to load platform settings:', error));
+  }, []);
 
   // Restore session on mount
   useEffect(() => {
@@ -130,7 +160,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider value={{
-      screen, userId, user, balance, accountType, maxSingleDeposit, trades, transactions, loading,
+      screen, userId, user, balance, accountType, maxSingleDeposit, trades, transactions, loading, settings,
       navigate,
       setUser: handleSetUser,
       setUserId: handleSetUserId,

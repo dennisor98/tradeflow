@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, decimal, int, bigint, timestamp } from 'drizzle-orm/mysql-core';
+import { mysqlTable, varchar, decimal, int, bigint, timestamp, text } from 'drizzle-orm/mysql-core';
 
 export const users = mysqlTable('users', {
   id: varchar('id', { length: 36 }).primaryKey(),
@@ -7,6 +7,12 @@ export const users = mysqlTable('users', {
   email: varchar('email', { length: 255 }).notNull(),
   balance: decimal('balance', { precision: 15, scale: 2 }).notNull().default('0'),
   accountType: varchar('account_type', { length: 20 }).notNull().default('normal'),
+  // Access role. 'admin' unlocks the admin console; 'marketer' is a CRM label
+  // for affiliates/promoters. Roles do not affect trade outcomes.
+  role: varchar('role', { length: 20 }).notNull().default('user'),
+  // scrypt hash, only set for admin accounts. Ordinary users sign in by
+  // emailed OTP and keep this null.
+  passwordHash: varchar('password_hash', { length: 255 }),
   maxSingleDeposit: decimal('max_single_deposit', { precision: 15, scale: 2 }).notNull().default('0'),
   isActive: int('is_active').notNull().default(0),
   emailVerifiedAt: timestamp('email_verified_at'),
@@ -64,6 +70,32 @@ export const mpesaTransactions = mysqlTable('mpesa_transactions', {
   resultDesc: varchar('result_desc', { length: 255 }),
   mpesaReceiptNumber: varchar('mpesa_receipt_number', { length: 50 }),
   transactionDate: varchar('transaction_date', { length: 20 }),
+  // The USD/KES rate in force when this push was created. Locked onto the row
+  // so a later admin change cannot credit a customer at a different rate than
+  // the one they were charged at.
+  usdToKesRate: decimal('usd_to_kes_rate', { precision: 12, scale: 4 }),
+  // Throttles how often we ask Safaricom about a still-pending push, since the
+  // client polls far faster than Daraja wants to be queried.
+  lastQueriedAt: timestamp('last_queried_at'),
+  queryCount: int('query_count').notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow().onUpdateNow(),
+});
+
+export const adminAuditLog = mysqlTable('admin_audit_log', {
+  id: varchar('id', { length: 36 }).primaryKey(),
+  adminId: varchar('admin_id', { length: 36 }).notNull(),
+  adminEmail: varchar('admin_email', { length: 255 }).notNull(),
+  action: varchar('action', { length: 60 }).notNull(),
+  targetUserId: varchar('target_user_id', { length: 36 }),
+  targetUserEmail: varchar('target_user_email', { length: 255 }),
+  details: text('details'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const platformSettings = mysqlTable('platform_settings', {
+  key: varchar('setting_key', { length: 64 }).primaryKey(),
+  value: varchar('setting_value', { length: 255 }).notNull(),
+  updatedBy: varchar('updated_by', { length: 255 }),
   updatedAt: timestamp('updated_at').notNull().defaultNow().onUpdateNow(),
 });

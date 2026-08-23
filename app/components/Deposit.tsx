@@ -4,17 +4,15 @@ import { useApp } from "../context/AppContext";
 import { QRCodeSVG } from "qrcode.react";
 
 const METHODS = [
-  { id: "card", label: "Card (Stripe Checkout)", icon: "💳", fee: "Standard", time: "Instant" },
+  // { id: "card", label: "Card (Stripe Checkout)", icon: "💳", fee: "Standard", time: "Instant" },
   { id: "mpesa", label: "M-Pesa", icon: "📱", fee: "Free", time: "Instant" },
   { id: "crypto", label: "USDT / Crypto", icon: "🔐", fee: "Free", time: "~10 min" },
 ];
 
 const PRESETS = [10, 25, 50, 100, 250, 500, 1000, 2000, 5000];
 
-const USD_TO_KES_RATE = 130; // Conversion rate
-
 export default function Deposit() {
-  const { navigate, addBalance, addTransaction, refreshData, userId } = useApp();
+  const { navigate, addBalance, addTransaction, refreshData, userId, settings } = useApp();
   const [method, setMethod] = useState(METHODS[0]);
   const [amount, setAmount] = useState("");
   const [step, setStep] = useState<"form" | "confirm" | "crypto" | "txid" | "mpesa" | "success">("form");
@@ -26,10 +24,26 @@ export default function Deposit() {
   const [depositId, setDepositId] = useState<string>("");
   const [mpesaStatus, setMpesaStatus] = useState<"pending" | "completed" | "failed">("pending");
   const [message, setMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
+  // Quoted by the server so the screen and the charge always agree. Null until
+  // settings load, so the Continue button stays shut rather than gating on a
+  // placeholder the server would then disagree with.
+  const usdToKesRate = settings?.usdToKesRate ?? null;
+  const minDeposit = settings?.minDepositUsd ?? null;
 
   const numAmount = parseFloat(amount) || 0;
   const fee = 0;
   const total = numAmount + fee;
+  const meetsMinimum = minDeposit !== null && numAmount >= minDeposit;
+  const phoneReady = method.id !== "mpesa" || Boolean(phone && phone.replace(/\D/g, "").length === 10);
+  const canContinue = meetsMinimum && phoneReady;
+  // Whole dollars read better on the button; cents only show when they exist.
+  const minDepositLabel = minDeposit === null
+    ? ""
+    : Number.isInteger(minDeposit) ? String(minDeposit) : minDeposit.toFixed(2);
+  // Drop the chips an admin has priced out, and always offer the minimum itself.
+  const presets = minDeposit === null
+    ? PRESETS
+    : [...new Set([minDeposit, ...PRESETS.filter(p => p >= minDeposit)])];
 
   // Fetch crypto address when crypto method is selected
   useEffect(() => {
@@ -57,6 +71,13 @@ export default function Deposit() {
           const response = await fetch(`/api/mpesa/status?transactionId=${depositId}`);
           const data = await response.json();
           
+          if (data.stale) {
+            setMessage({
+              type: "error",
+              text: "Still waiting on M-Pesa. If no prompt arrived, cancel and try again.",
+            });
+          }
+
           if (data.status === "completed") {
             setMpesaStatus("completed");
             setMessage({ type: "success", text: "Payment completed successfully!" });
@@ -85,32 +106,33 @@ export default function Deposit() {
   }, [message]);
 
   const handleDeposit = async () => {
-    let redirectInitiated = false;
     setLoading(true);
     try {
-      if (method.id === "card") {
-        if (!userId) {
-          setMessage({ type: "error", text: "Please log in to make a deposit" });
-          setLoading(false);
-          return;
-        }
-
-        const response = await fetch("/api/stripe/create-checkout-session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ amount: numAmount, userId }),
-        });
-        const data = await response.json();
-
-        if (!response.ok || !data.url) {
-          setMessage({ type: "error", text: data.error || "Unable to start Stripe checkout" });
-          setLoading(false);
-          return;
-        }
-        redirectInitiated = true;
-        window.location.assign(data.url);
-        return;
-      } else if (method.id === "crypto") {
+      // Stripe card deposits are disabled — see the commented-out entry in METHODS.
+      // if (method.id === "card") {
+      //   if (!userId) {
+      //     setMessage({ type: "error", text: "Please log in to make a deposit" });
+      //     setLoading(false);
+      //     return;
+      //   }
+      //
+      //   const response = await fetch("/api/stripe/create-checkout-session", {
+      //     method: "POST",
+      //     headers: { "Content-Type": "application/json" },
+      //     body: JSON.stringify({ amount: numAmount, userId }),
+      //   });
+      //   const data = await response.json();
+      //
+      //   if (!response.ok || !data.url) {
+      //     setMessage({ type: "error", text: data.error || "Unable to start Stripe checkout" });
+      //     setLoading(false);
+      //     return;
+      //   }
+      //   redirectInitiated = true;
+      //   window.location.assign(data.url);
+      //   return;
+      // }
+      if (method.id === "crypto") {
         // For crypto, create a pending deposit and show crypto address
         const id = crypto.randomUUID();
         setDepositId(id);
@@ -123,11 +145,10 @@ export default function Deposit() {
           setLoading(false);
           return;
         }
-        const kesAmount = numAmount * USD_TO_KES_RATE;
         const response = await fetch("/api/mpesa/stkpush", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phone, amount: kesAmount, userId }),
+          body: JSON.stringify({ phone, amountUsd: numAmount, userId }),
         });
         const data = await response.json();
         
@@ -147,9 +168,7 @@ export default function Deposit() {
     } catch (error) {
       console.error('Deposit error:', error);
     } finally {
-      if (!redirectInitiated) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   };
 
@@ -191,12 +210,12 @@ export default function Deposit() {
 
   if (step === "crypto") return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
-      <div style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, position: "sticky", top: 0, zIndex: 50 }}>
+      <div className="app-bar" style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", paddingTop: 14, paddingBottom: 14, display: "flex", alignItems: "center", gap: 12, position: "sticky", top: 0, zIndex: 50 }}>
         <button onClick={() => setStep("confirm")} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 22, cursor: "pointer" }}>←</button>
         <h1 style={{ fontWeight: 700, fontSize: 18 }}>Crypto Deposit</h1>
       </div>
 
-      <div style={{ maxWidth: 480, margin: "0 auto", padding: "16px" }}>
+      <div className="app-shell" style={{ padding: "16px" }}>
         <div style={{ background: "var(--surface)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border)", padding: "24px", marginBottom: 16, textAlign: "center" }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>🔐</div>
           <p style={{ color: "var(--text-muted)", fontSize: 14 }}>Deposit Amount</p>
@@ -208,7 +227,8 @@ export default function Deposit() {
           
           {/* QR Code */}
           <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-            <div style={{ background: "white", padding: 12, borderRadius: 8, border: "1px solid var(--border)" }}>
+            {/* Stays white on purpose — QR scanners need a light quiet zone. */}
+            <div style={{ background: "#ffffff", padding: 12, borderRadius: 8, border: "1px solid var(--border)" }}>
               <QRCodeSVG value={cryptoAddress} size={180} level="M" />
             </div>
           </div>
@@ -220,7 +240,7 @@ export default function Deposit() {
             </div>
             <button
               onClick={() => { navigator.clipboard.writeText(cryptoAddress); }}
-              style={{ padding: "10px 12px", background: "var(--accent)", color: "white", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
+              style={{ padding: "10px 12px", background: "var(--accent)", color: "var(--on-accent)", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}
             >
               Copy
             </button>
@@ -231,7 +251,7 @@ export default function Deposit() {
           </p>
         </div>
 
-        <button onClick={() => setStep("txid")} style={{ width: "100%", padding: "16px", background: "var(--accent)", color: "white", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+        <button onClick={() => setStep("txid")} style={{ width: "100%", padding: "16px", background: "var(--accent)", color: "var(--on-accent)", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
           I&apos;ve Sent the Payment
         </button>
       </div>
@@ -240,18 +260,18 @@ export default function Deposit() {
 
   if (step === "mpesa") return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
-      <div style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, position: "sticky", top: 0, zIndex: 50 }}>
+      <div className="app-bar" style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", paddingTop: 14, paddingBottom: 14, display: "flex", alignItems: "center", gap: 12, position: "sticky", top: 0, zIndex: 50 }}>
         <button onClick={() => setStep("form")} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 22, cursor: "pointer" }}>←</button>
         <h1 style={{ fontWeight: 700, fontSize: 18 }}>M-Pesa Payment</h1>
       </div>
 
-      <div style={{ maxWidth: 480, margin: "0 auto", padding: "16px" }}>
+      <div className="app-shell" style={{ padding: "16px" }}>
         <div style={{ background: "var(--surface)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border)", padding: "24px", marginBottom: 16, textAlign: "center" }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>📱</div>
           <p style={{ color: "var(--text-muted)", fontSize: 14 }}>Deposit Amount</p>
           <p style={{ fontSize: 44, fontWeight: 700, color: "var(--text-primary)", fontFamily: "'DM Mono', monospace", margin: "8px 0" }}>${numAmount.toFixed(2)}</p>
-          <p style={{ fontSize: 20, fontWeight: 600, color: "var(--accent)", fontFamily: "'DM Mono', monospace", marginTop: 8 }}>KES {(numAmount * USD_TO_KES_RATE).toFixed(0)}</p>
-          <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Exchange rate: 1 USD = {USD_TO_KES_RATE} KES</p>
+          <p style={{ fontSize: 20, fontWeight: 600, color: "var(--accent)", fontFamily: "'DM Mono', monospace", marginTop: 8 }}>KES {usdToKesRate ? (numAmount * usdToKesRate).toFixed(0) : "…"}</p>
+          <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Exchange rate: 1 USD = {usdToKesRate ?? "…"} KES</p>
         </div>
 
         <div style={{ background: "var(--surface)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border)", padding: "20px", marginBottom: 16 }}>
@@ -274,7 +294,7 @@ export default function Deposit() {
             <>
               <h3 style={{ fontWeight: 600, fontSize: 16, marginBottom: 16, textAlign: "center", color: "var(--up)" }}>Payment Successful!</h3>
               <p style={{ fontSize: 14, color: "var(--text-muted)", textAlign: "center" }}>
-                Your payment of KES {(numAmount * USD_TO_KES_RATE).toFixed(0)} has been received and your account has been credited with ${numAmount.toFixed(2)}.
+                Your payment of KES {usdToKesRate ? (numAmount * usdToKesRate).toFixed(0) : "…"} has been received and your account has been credited with ${numAmount.toFixed(2)}.
               </p>
             </>
           ) : (
@@ -288,11 +308,11 @@ export default function Deposit() {
         </div>
 
         {mpesaStatus === "completed" ? (
-          <button onClick={() => navigate("dashboard")} style={{ width: "100%", padding: "16px", background: "var(--accent)", color: "white", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+          <button onClick={() => navigate("dashboard")} style={{ width: "100%", padding: "16px", background: "var(--accent)", color: "var(--on-accent)", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
             Back to Dashboard
           </button>
         ) : mpesaStatus === "failed" ? (
-          <button onClick={() => setStep("form")} style={{ width: "100%", padding: "16px", background: "var(--accent)", color: "white", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+          <button onClick={() => setStep("form")} style={{ width: "100%", padding: "16px", background: "var(--accent)", color: "var(--on-accent)", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
             Try Again
           </button>
         ) : null}
@@ -302,7 +322,7 @@ export default function Deposit() {
 
   if (step === "txid") return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
-      <div style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, position: "sticky", top: 0, zIndex: 50 }}>
+      <div className="app-bar" style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", paddingTop: 14, paddingBottom: 14, display: "flex", alignItems: "center", gap: 12, position: "sticky", top: 0, zIndex: 50 }}>
         <button onClick={() => setStep("crypto")} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 22, cursor: "pointer" }}>←</button>
         <h1 style={{ fontWeight: 700, fontSize: 18 }}>Verify Transaction</h1>
       </div>
@@ -327,7 +347,7 @@ export default function Deposit() {
         </div>
       )}
 
-      <div style={{ maxWidth: 480, margin: "0 auto", padding: "16px" }}>
+      <div className="app-shell" style={{ padding: "16px" }}>
         <div style={{ background: "var(--surface)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border)", padding: "24px", marginBottom: 16, textAlign: "center" }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>📋</div>
           <p style={{ color: "var(--text-muted)", fontSize: 14 }}>Enter Transaction ID</p>
@@ -351,7 +371,7 @@ export default function Deposit() {
         <button
           onClick={handleVerifyTxId}
           disabled={verifying || !txId}
-          style={{ width: "100%", padding: "16px", background: verifying || !txId ? "var(--border)" : "var(--accent)", color: verifying || !txId ? "var(--text-muted)" : "white", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: verifying || !txId ? "not-allowed" : "pointer", fontFamily: "inherit" }}
+          style={{ width: "100%", padding: "16px", background: verifying || !txId ? "var(--border)" : "var(--accent)", color: verifying || !txId ? "var(--text-muted)" : "var(--on-accent)", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: verifying || !txId ? "not-allowed" : "pointer", fontFamily: "inherit" }}
         >
           {verifying ? "Verifying..." : "Verify Deposit"}
         </button>
@@ -370,7 +390,7 @@ export default function Deposit() {
           <p style={{ fontSize: 36, fontWeight: 700, color: "var(--up)", fontFamily: "'DM Mono', monospace" }}>${numAmount.toFixed(2)}</p>
           <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 8 }}>via {method.label}</p>
         </div>
-        <button onClick={() => navigate("trade")} style={{ width: "100%", padding: "16px", background: "var(--accent)", color: "white", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: "pointer", marginBottom: 12, fontFamily: "inherit" }}>
+        <button onClick={() => navigate("trade")} style={{ width: "100%", padding: "16px", background: "var(--accent)", color: "var(--on-accent)", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: "pointer", marginBottom: 12, fontFamily: "inherit" }}>
           Start Trading Now
         </button>
         <button onClick={() => navigate("dashboard")} style={{ width: "100%", padding: "16px", background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--border)", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
@@ -382,7 +402,7 @@ export default function Deposit() {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
-      <div style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, position: "sticky", top: 0, zIndex: 50 }}>
+      <div className="app-bar" style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", paddingTop: 14, paddingBottom: 14, display: "flex", alignItems: "center", gap: 12, position: "sticky", top: 0, zIndex: 50 }}>
         <button onClick={() => step === "confirm" ? setStep("form") : navigate("dashboard")} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 22, cursor: "pointer" }}>←</button>
         <h1 style={{ fontWeight: 700, fontSize: 18 }}>Deposit Funds</h1>
       </div>
@@ -407,7 +427,7 @@ export default function Deposit() {
         </div>
       )}
 
-      <div style={{ maxWidth: 480, margin: "0 auto", padding: "16px" }}>
+      <div className="app-shell" style={{ padding: "16px" }}>
         {step === "form" ? (
           <>
             {/* Method Selection */}
@@ -423,7 +443,7 @@ export default function Deposit() {
                     <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Fee: {m.fee} · {m.time}</div>
                   </div>
                   <div style={{ width: 20, height: 20, borderRadius: "50%", border: `2px solid ${method.id === m.id ? "var(--accent)" : "var(--border)"}`, background: method.id === m.id ? "var(--accent)" : "transparent", position: "relative" }}>
-                    {method.id === m.id && <div style={{ position: "absolute", inset: 3, borderRadius: "50%", background: "white" }} />}
+                    {method.id === m.id && <div style={{ position: "absolute", inset: 3, borderRadius: "50%", background: "var(--on-accent)" }} />}
                   </div>
                 </div>
               ))}
@@ -441,8 +461,8 @@ export default function Deposit() {
                 />
               </div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {PRESETS.map(p => (
-                  <button key={p} onClick={() => setAmount(String(p))} style={{ padding: "6px 12px", borderRadius: 20, border: "1px solid var(--border)", background: amount === String(p) ? "var(--accent)" : "var(--bg)", color: amount === String(p) ? "white" : "var(--text-secondary)", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
+                {presets.map(p => (
+                  <button key={p} onClick={() => setAmount(String(p))} style={{ padding: "6px 12px", borderRadius: 20, border: "1px solid var(--border)", background: amount === String(p) ? "var(--accent)" : "var(--bg)", color: amount === String(p) ? "var(--on-accent)" : "var(--text-secondary)", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "inherit" }}>
                     ${p}
                   </button>
                 ))}
@@ -453,12 +473,13 @@ export default function Deposit() {
             {method.id === "mpesa" && numAmount > 0 && (
               <div style={{ background: "var(--accent-light)", borderRadius: "var(--radius-lg)", border: "1px solid var(--accent)", padding: "14px", marginBottom: 16 }}>
                 <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>You will be prompted to pay</p>
-                <p style={{ fontSize: 24, fontWeight: 700, color: "var(--accent)", fontFamily: "'DM Mono', monospace" }}>KES {(numAmount * USD_TO_KES_RATE).toFixed(0)}</p>
-                <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Exchange rate: 1 USD = {USD_TO_KES_RATE} KES</p>
+                <p style={{ fontSize: 24, fontWeight: 700, color: "var(--accent)", fontFamily: "'DM Mono', monospace" }}>KES {usdToKesRate ? (numAmount * usdToKesRate).toFixed(0) : "…"}</p>
+                <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Exchange rate: 1 USD = {usdToKesRate ?? "…"} KES</p>
               </div>
             )}
 
             {/* Payment Details */}
+            {/* Stripe card deposits are disabled — see the commented-out entry in METHODS.
             {method.id === "card" && (
               <div style={{ background: "var(--surface)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border)", padding: "16px", marginBottom: 16 }}>
                 <p style={{ fontWeight: 600, fontSize: 15, marginBottom: 10 }}>Stripe Checkout</p>
@@ -467,6 +488,7 @@ export default function Deposit() {
                 </p>
               </div>
             )}
+            */}
 
             {method.id === "mpesa" && (
               <div style={{ background: "var(--surface)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border)", padding: "16px", marginBottom: 16 }}>
@@ -496,9 +518,9 @@ export default function Deposit() {
               </div>
             )}
 
-            <button onClick={() => numAmount >= 10 && (method.id !== "mpesa" || (phone && phone.replace(/\D/g, "").length === 10)) && setStep("confirm")} disabled={numAmount < 10 || (method.id === "mpesa" && (!phone || phone.replace(/\D/g, "").length !== 10))}
-              style={{ width: "100%", padding: "16px", background: numAmount >= 10 && (method.id !== "mpesa" || (phone && phone.replace(/\D/g, "").length === 10)) ? "var(--accent)" : "var(--border)", color: numAmount >= 10 && (method.id !== "mpesa" || (phone && phone.replace(/\D/g, "").length === 10)) ? "white" : "var(--text-muted)", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: numAmount >= 10 && (method.id !== "mpesa" || (phone && phone.replace(/\D/g, "").length === 10)) ? "pointer" : "not-allowed", fontFamily: "inherit" }}>
-              Continue — Minimum $10
+            <button onClick={() => canContinue && setStep("confirm")} disabled={!canContinue}
+              style={{ width: "100%", padding: "16px", background: canContinue ? "var(--accent)" : "var(--border)", color: canContinue ? "var(--on-accent)" : "var(--text-muted)", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: canContinue ? "pointer" : "not-allowed", fontFamily: "inherit" }}>
+              {minDeposit === null ? "Continue" : `Continue — Minimum $${minDepositLabel}`}
             </button>
           </>
         ) : (
@@ -519,7 +541,7 @@ export default function Deposit() {
               ))}
             </div>
             <button onClick={handleDeposit} disabled={loading || (method.id === "mpesa" && (!phone || phone.replace(/\D/g, "").length !== 10))}
-              style={{ width: "100%", padding: "16px", background: loading || (method.id === "mpesa" && (!phone || phone.replace(/\D/g, "").length !== 10)) ? "var(--border)" : "var(--accent)", color: loading || (method.id === "mpesa" && (!phone || phone.replace(/\D/g, "").length !== 10)) ? "var(--text-muted)" : "white", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: loading || (method.id === "mpesa" && (!phone || phone.replace(/\D/g, "").length !== 10)) ? "not-allowed" : "pointer", fontFamily: "inherit", marginBottom: 10 }}>
+              style={{ width: "100%", padding: "16px", background: loading || (method.id === "mpesa" && (!phone || phone.replace(/\D/g, "").length !== 10)) ? "var(--border)" : "var(--accent)", color: loading || (method.id === "mpesa" && (!phone || phone.replace(/\D/g, "").length !== 10)) ? "var(--text-muted)" : "var(--on-accent)", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: loading || (method.id === "mpesa" && (!phone || phone.replace(/\D/g, "").length !== 10)) ? "not-allowed" : "pointer", fontFamily: "inherit", marginBottom: 10 }}>
               {loading ? "Processing..." : `Confirm Deposit $${numAmount.toFixed(2)}`}
             </button>
             <p style={{ textAlign: "center", fontSize: 12, color: "var(--text-muted)" }}>🔒 Your payment is encrypted and secure</p>

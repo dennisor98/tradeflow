@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useApp } from "../context/AppContext";
+import { useApp, winRateFor } from "../context/AppContext";
+import { SESSION_LABEL, SESSION_SECONDS, formatClock } from "@/lib/trading-session";
 
 // const ASSETS = [
 //   { symbol: "EUR/USD", base: 1.0847, decimals: 4, volatility: 0.0001 },
@@ -10,14 +11,22 @@ import { useApp } from "../context/AppContext";
 //   { symbol: "OIL/USD", base: 78.42, decimals: 2, volatility: 0.001 },
 // ];
 
-const DURATIONS = [
-  { label: "30s", value: 30 },
-  { label: "1m", value: 60 },
-  { label: "5m", value: 300 },
-  { label: "15m", value: 900 },
-];
+// const DURATIONS = [
+//   { label: "30s", value: 30 },
+//   { label: "1m", value: 60 },
+//   { label: "5m", value: 300 },
+//   { label: "15m", value: 900 },
+// ];
+
+// Session length comes from lib/trading-session so the home page and the
+// trading screen can never disagree about how long a session runs.
+const SESSION = { label: SESSION_LABEL, value: SESSION_SECONDS };
 
 const AMOUNTS = [10, 25, 50, 100, 250];
+
+// Only reached if a trade settles before /api/settings responds. Mirrors the
+// defaults in lib/settings so the two cannot quietly disagree.
+const DEFAULT_WIN_RATES: Record<string, number> = { normal: 30, vip: 50, vvip: 70 };
 
 // Calculate payout rate based on amount staked (profit percentage only, not including stake)
 function getPayoutRate(amount: number): number {
@@ -53,11 +62,16 @@ function generateCandles(base: number, count = 60) {
 interface Candle { open: number; high: number; low: number; close: number; time: number; }
 
 export default function TradingScreen() {
-  const { balance, navigate, addBalance, deductBalance, addTrade, addTransaction, accountType, refreshData } = useApp();
+  const { balance, navigate, addBalance, deductBalance, addTrade, addTransaction, accountType, refreshData, settings } = useApp();
+
+  // The settle callback lives inside an interval closure created when the trade
+  // was placed, so it reads the ref rather than a captured render's value.
+  const settingsRef = useRef(settings);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
   const [assets, setAssets] = useState<any[]>([]);
   const [asset, setAsset] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-  const [duration, setDuration] = useState(DURATIONS[1]);
+  const duration = SESSION;
   const [amount, setAmount] = useState(25);
   const [customAmount, setCustomAmount] = useState("");
   const [candles, setCandles] = useState<Candle[]>([]);
@@ -169,16 +183,15 @@ export default function TradingScreen() {
         tradeCompletedRef.current = true;
         clearInterval(timerRef.current!);
         setCurrentPrice(price => {
-          // Apply different winning rates based on account type
-          // Normal accounts: 30% win rate, VIP accounts: 50% win rate, VVIP accounts: 70% win rate
-          const normalWinRate = 0.3;
-          const vipWinRate = 0.5;
-          const vvipWinRate = 0.7;
-          const winRate = accountType === "vvip" ? vvipWinRate : accountType === "vip" ? vipWinRate : normalWinRate;
-          
+          // Win rate per tier is admin-configured; settingsRef holds the latest
+          // snapshot so a session that started before a change still settles.
+          const winRatePercent = settingsRef.current
+            ? winRateFor(accountType, settingsRef.current)
+            : DEFAULT_WIN_RATES[accountType];
+
           // Determine if the trade wins based on the win rate
           const randomFactor = Math.random();
-          const won = randomFactor < winRate;
+          const won = randomFactor < winRatePercent / 100;
           
           const profit = won ? tradeAmount * payout : 0;
           const balanceBeforeTrade = balance;
@@ -203,7 +216,7 @@ export default function TradingScreen() {
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
   // Chart dimensions
-  const W = 340, H = 180, PAD = { t: 8, r: 8, b: 24, l: 52 };
+  const W = 400, H = 180, PAD = { t: 8, r: 70, b: 24, l: 52 };
   const chartW = W - PAD.l - PAD.r;
   const chartH = H - PAD.t - PAD.b;
   const visibleCandles = candles.slice(-40);
@@ -233,7 +246,7 @@ export default function TradingScreen() {
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column" }}>
       {/* Header */}
-      <div style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
+      <div className="app-bar" style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", paddingTop: 12, paddingBottom: 12, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
         <button onClick={() => navigate("dashboard")} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>←</button>
         <div>
           <p style={{ textAlign: "center", fontSize: 12, color: "var(--text-muted)", marginBottom: 1 }}>Balance</p>
@@ -242,7 +255,7 @@ export default function TradingScreen() {
         <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--accent-light)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>📊</div>
       </div>
 
-      <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px", paddingBottom: 100 }}>
+      <div className="app-shell" style={{ flex: 1, overflowY: "auto", padding: "12px 14px", paddingBottom: 100 }}>
         {/* Asset Selector */}
         <div style={{ background: "var(--surface)", borderRadius: "var(--radius)", border: "1px solid var(--border)", padding: "10px 14px", marginBottom: 12, cursor: "pointer", position: "relative" }} onClick={() => setShowAssets(!showAssets)}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -398,14 +411,14 @@ export default function TradingScreen() {
               <span style={{ fontSize: 11, color: "var(--accent)", background: "var(--accent-light)", padding: "2px 8px", borderRadius: 20, fontWeight: 500 }}>● LIVE</span>
             </div>
           </div>
-          <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: "visible" }}>
+          <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: "block", maxWidth: 560, margin: "0 auto" }}>
             {[0, 0.25, 0.5, 0.75, 1].map(r => {
               const y = PAD.t + r * chartH;
               const price = maxP - r * range;
               return (
                 <g key={r}>
-                  <line x1={PAD.l} y1={y} x2={W - PAD.r} y2={y} stroke="#e4e2dc" strokeWidth="0.5" />
-                  <text x={PAD.l - 4} y={y + 4} textAnchor="end" fontSize="8" fill="#9b9891" fontFamily="DM Mono">
+                  <line x1={PAD.l} y1={y} x2={W - PAD.r} y2={y} stroke="var(--border)" strokeWidth="0.5" />
+                  <text x={PAD.l - 4} y={y + 4} textAnchor="end" fontSize="8" fill="var(--text-muted)" fontFamily="DM Mono">
                     {price.toFixed(asset.decimals < 2 ? 0 : 2)}
                   </text>
                 </g>
@@ -413,16 +426,16 @@ export default function TradingScreen() {
             })}
             {activeTrade && (
               <line x1={PAD.l} y1={toY(activeTrade.entryPrice)} x2={W - PAD.r} y2={toY(activeTrade.entryPrice)}
-                stroke={activeTrade.direction === "over" ? "#16a34a" : "#dc2626"} strokeWidth="1" strokeDasharray="4,2" />
+                stroke={activeTrade.direction === "over" ? "var(--up)" : "var(--down)"} strokeWidth="1" strokeDasharray="4,2" />
             )}
-            <line x1={PAD.l} y1={toY(currentPrice)} x2={W - PAD.r} y2={toY(currentPrice)} stroke="#1a6b3c" strokeWidth="0.75" strokeDasharray="2,2" opacity="0.4" />
+            <line x1={PAD.l} y1={toY(currentPrice)} x2={W - PAD.r} y2={toY(currentPrice)} stroke="var(--accent)" strokeWidth="0.75" strokeDasharray="2,2" opacity="0.4" />
             {chartType === "line" ? (
               <>
-                <rect x={PAD.l} y={PAD.t} width={chartW} height={chartH} fill="white" />
+                <rect x={PAD.l} y={PAD.t} width={chartW} height={chartH} fill="var(--surface)" />
                 <defs>
                   <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#1a6b3c" stopOpacity="0.3" />
-                    <stop offset="100%" stopColor="#1a6b3c" stopOpacity="0.05" />
+                    <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.3" />
+                    <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.05" />
                   </linearGradient>
                 </defs>
                 <path
@@ -441,7 +454,7 @@ export default function TradingScreen() {
                       const currY = toY(c.close);
                       return `Q${(prevX + currX) / 2},${prevY} ${currX},${currY}`;
                     }).join(" ")}
-                  fill="none" stroke="#1a6b3c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                  fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
                 />
               </>
             ) : (
@@ -449,7 +462,7 @@ export default function TradingScreen() {
                 const x = PAD.l + i * cw + cw * 0.1;
                 const candleW = Math.max(cw * 0.7, 2);
                 const bullish = c.close >= c.open;
-                const color = bullish ? "#16a34a" : "#dc2626";
+                const color = bullish ? "var(--up)" : "var(--down)";
                 const bodyTop = Math.min(toY(c.open), toY(c.close));
                 const bodyH = Math.max(Math.abs(toY(c.open) - toY(c.close)), 1);
                 const centerX = PAD.l + i * cw + cw / 2;
@@ -461,8 +474,8 @@ export default function TradingScreen() {
                 );
               })
             )}
-            <rect x={W - PAD.r} y={toY(currentPrice) - 10} width={64} height={20} rx="4" fill="#1a6b3c" />
-            <text x={W - PAD.r + 32} y={toY(currentPrice) + 4} textAnchor="middle" fontSize="9" fill="white" fontFamily="DM Mono" fontWeight="600">
+            <rect x={W - PAD.r + 4} y={toY(currentPrice) - 10} width={62} height={20} rx="4" fill="var(--accent)" />
+            <text x={W - PAD.r + 35} y={toY(currentPrice) + 4} textAnchor="middle" fontSize="9" fill="var(--on-accent)" fontFamily="DM Mono" fontWeight="600">
               {formatPrice(currentPrice)}
             </text>
           </svg>
@@ -470,7 +483,7 @@ export default function TradingScreen() {
 
         {/* Active Trade Banner */}
         {activeTrade && (
-          <div style={{ background: activeTrade.direction === "over" ? "var(--up-bg)" : "var(--down-bg)", borderRadius: "var(--radius)", border: `1px solid ${activeTrade.direction === "over" ? "#86efac" : "#fca5a5"}`, padding: "14px 16px", marginBottom: 12 }}>
+          <div style={{ background: activeTrade.direction === "over" ? "var(--up-bg)" : "var(--down-bg)", borderRadius: "var(--radius)", border: `1px solid ${activeTrade.direction === "over" ? "var(--up)" : "var(--down)"}`, padding: "14px 16px", marginBottom: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <div>
                 <span style={{ fontWeight: 700, fontSize: 15, color: activeTrade.direction === "over" ? "var(--up)" : "var(--down)" }}>
@@ -479,7 +492,7 @@ export default function TradingScreen() {
                 <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>Entry: <strong style={{ fontFamily: "'DM Mono', monospace" }}>{formatPrice(activeTrade.entryPrice)}</strong></p>
               </div>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: activeTrade.direction === "over" ? "var(--up)" : "var(--down)" }}>{activeTrade.timeLeft}s</div>
+                <div style={{ fontSize: 28, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: activeTrade.direction === "over" ? "var(--up)" : "var(--down)" }}>{formatClock(activeTrade.timeLeft)}</div>
                 <div style={{ fontSize: 11, color: "var(--text-muted)" }}>remaining</div>
               </div>
             </div>
@@ -489,13 +502,13 @@ export default function TradingScreen() {
                 { label: "Payout", val: `$${(activeTrade.amount * payout).toFixed(2)}` },
                 { label: "Current", val: currentPrice > activeTrade.entryPrice ? "▲ Above" : "▼ Below" },
               ].map(item => (
-                <div key={item.label} style={{ background: "rgba(255,255,255,0.6)", borderRadius: 8, padding: "8px", textAlign: "center" }}>
+                <div key={item.label} style={{ background: "rgba(255,255,255,0.05)", borderRadius: 8, padding: "8px", textAlign: "center" }}>
                   <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.label}</div>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>{item.val}</div>
                 </div>
               ))}
             </div>
-            <div style={{ marginTop: 10, height: 4, background: "rgba(0,0,0,0.1)", borderRadius: 2, overflow: "hidden" }}>
+            <div style={{ marginTop: 10, height: 4, background: "rgba(255,255,255,0.10)", borderRadius: 2, overflow: "hidden" }}>
               <div style={{ height: "100%", background: activeTrade.direction === "over" ? "var(--up)" : "var(--down)", width: `${(1 - activeTrade.timeLeft / duration.value) * 100}%`, transition: "width 1s linear", borderRadius: 2 }} />
             </div>
           </div>
@@ -503,7 +516,7 @@ export default function TradingScreen() {
 
         {/* Result Banner */}
         {result && (
-          <div style={{ background: result.won ? "var(--up-bg)" : "var(--down-bg)", borderRadius: "var(--radius)", border: `1px solid ${result.won ? "#86efac" : "#fca5a5"}`, padding: "16px", marginBottom: 12, textAlign: "center" }}>
+          <div style={{ background: result.won ? "var(--up-bg)" : "var(--down-bg)", borderRadius: "var(--radius)", border: `1px solid ${result.won ? "var(--up)" : "var(--down)"}`, padding: "16px", marginBottom: 12, textAlign: "center" }}>
             <div style={{ fontSize: 32, marginBottom: 4 }}>{result.won ? "🎉" : "😔"}</div>
             <div style={{ fontWeight: 700, fontSize: 20, color: result.won ? "var(--up)" : "var(--down)" }}>
               {result.won ? `+$${result.profit.toFixed(2)} Profit!` : `-$${result.profit.toFixed(2)} Loss`}
@@ -515,12 +528,9 @@ export default function TradingScreen() {
         {/* Duration */}
         <div style={{ background: "var(--surface)", borderRadius: "var(--radius)", border: "1px solid var(--border)", padding: "12px 14px", marginBottom: 10 }}>
           <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8, fontWeight: 500 }}>EXPIRY TIME</p>
-          <div style={{ display: "flex", gap: 8 }}>
-            {DURATIONS.map(d => (
-              <button key={d.label} onClick={() => setDuration(d)} style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: "1px solid", borderColor: duration.value === d.value ? "var(--accent)" : "var(--border)", background: duration.value === d.value ? "var(--accent)" : "transparent", color: duration.value === d.value ? "white" : "var(--text-secondary)", fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s" }}>
-                {d.label}
-              </button>
-            ))}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", borderRadius: 8, border: "1px solid var(--accent)", background: "var(--accent-light)" }}>
+            <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>Trading session</span>
+            <span style={{ fontWeight: 700, fontSize: 15, color: "var(--accent)", fontFamily: "'DM Mono', monospace" }}>{duration.label}</span>
           </div>
         </div>
 
@@ -552,7 +562,7 @@ export default function TradingScreen() {
           <button
             onClick={() => placeTrade("under")}
             disabled={isPlacingTrade || !!activeTrade || tradeAmount < 1 || tradeAmount > balance}
-            style={{ padding: "6px 6px", background: isPlacingTrade || !!activeTrade || tradeAmount > balance ? "#f0f0f0" : "var(--down)", color: isPlacingTrade || !!activeTrade || tradeAmount > balance ? "var(--text-muted)" : "white", border: "none", borderRadius: "var(--radius)", fontSize: 16, fontWeight: 700, cursor: isPlacingTrade || !!activeTrade || tradeAmount > balance ? "not-allowed" : "pointer", fontFamily: "inherit", transition: "all 0.15s", boxShadow: !isPlacingTrade && !activeTrade && tradeAmount <= balance ? "0 4px 14px rgba(220,38,38,0.3)" : "none" }}>
+            style={{ padding: "6px 6px", background: isPlacingTrade || !!activeTrade || tradeAmount > balance ? "var(--surface-2)" : "var(--down)", color: isPlacingTrade || !!activeTrade || tradeAmount > balance ? "var(--text-muted)" : "var(--on-accent)", border: "none", borderRadius: "var(--radius)", fontSize: 16, fontWeight: 700, cursor: isPlacingTrade || !!activeTrade || tradeAmount > balance ? "not-allowed" : "pointer", fontFamily: "inherit", transition: "all 0.15s", boxShadow: !isPlacingTrade && !activeTrade && tradeAmount <= balance ? "0 4px 14px rgba(220,38,38,0.3)" : "none" }}>
             <div style={{ fontSize: 10, marginBottom: 2 }}>▼ SELL</div>
             {/* <div>SELL</div> */}
             <div style={{ fontSize: 10, opacity: 0.8, marginTop: 2 }}>Price goes down</div>
@@ -560,7 +570,7 @@ export default function TradingScreen() {
           <button
             onClick={() => placeTrade("over")}
             disabled={isPlacingTrade || !!activeTrade || tradeAmount < 1 || tradeAmount > balance}
-            style={{ padding: "6px 6px", background: isPlacingTrade || !!activeTrade || tradeAmount > balance ? "#f0f0f0" : "var(--up)", color: isPlacingTrade || !!activeTrade || tradeAmount > balance ? "var(--text-muted)" : "white", border: "none", borderRadius: "var(--radius)", fontSize: 16, fontWeight: 700, cursor: isPlacingTrade || !!activeTrade || tradeAmount > balance ? "not-allowed" : "pointer", fontFamily: "inherit", transition: "all 0.15s", boxShadow: !isPlacingTrade && !activeTrade && tradeAmount <= balance ? "0 4px 14px rgba(22,163,74,0.3)" : "none" }}>
+            style={{ padding: "6px 6px", background: isPlacingTrade || !!activeTrade || tradeAmount > balance ? "var(--surface-2)" : "var(--up)", color: isPlacingTrade || !!activeTrade || tradeAmount > balance ? "var(--text-muted)" : "var(--on-accent)", border: "none", borderRadius: "var(--radius)", fontSize: 16, fontWeight: 700, cursor: isPlacingTrade || !!activeTrade || tradeAmount > balance ? "not-allowed" : "pointer", fontFamily: "inherit", transition: "all 0.15s", boxShadow: !isPlacingTrade && !activeTrade && tradeAmount <= balance ? "0 4px 14px rgba(22,163,74,0.3)" : "none" }}>
             <div style={{ fontSize: 10, marginBottom: 2 }}>▲ BUY</div>
             {/* <div>BUY</div> */}
             <div style={{ fontSize: 10, opacity: 0.8, marginTop: 2 }}>Price goes up</div>
@@ -568,7 +578,7 @@ export default function TradingScreen() {
         </div>
 
         {tradeAmount > balance && (
-          <div style={{ textAlign: "center", padding: "10px", background: "var(--danger-light)", borderRadius: 8, border: "1px solid #fca5a5" }}>
+          <div style={{ textAlign: "center", padding: "10px", background: "var(--danger-light)", borderRadius: 8, border: "1px solid var(--down)" }}>
             <p style={{ fontSize: 13, color: "var(--danger)", fontWeight: 500 }}>Insufficient balance. <span style={{ cursor: "pointer", textDecoration: "underline" }} onClick={() => navigate("deposit")}>Deposit funds →</span></p>
           </div>
         )}

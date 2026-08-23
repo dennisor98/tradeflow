@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { users } from '@/lib/schema';
+import { getSettings, resolveAccountType } from '@/lib/settings';
 import { eq } from 'drizzle-orm';
 import { sendDepositEmail } from '@/lib/email';
 
@@ -61,14 +62,9 @@ export async function POST(request: Request) {
       const newMaxDeposit = Math.max(currentMaxDeposit, amount);
       updates.maxSingleDeposit = newMaxDeposit.toString();
 
-      // Upgrade to VVIP if single deposit is $5000+
-      if (newMaxDeposit >= 5000 && user[0].accountType !== 'vvip') {
-        updates.accountType = 'vvip';
-      }
-      // Upgrade to VIP if single deposit is $1000+ (but not VVIP)
-      else if (newMaxDeposit >= 1000 && user[0].accountType === 'normal') {
-        updates.accountType = 'vip';
-      }
+      // Tier thresholds are admin-configurable; see lib/settings.
+      const promotion = resolveAccountType(newMaxDeposit, user[0].accountType, await getSettings());
+      if (promotion) updates.accountType = promotion;
     }
 
     await db.update(users).set(updates).where(eq(users.id, userId));

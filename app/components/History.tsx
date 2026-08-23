@@ -14,11 +14,11 @@ export default function History() {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
-      <div style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+      <div className="app-bar" style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", paddingTop: 14, paddingBottom: 14, display: "flex", alignItems: "center", gap: 12 }}>
         <button onClick={() => navigate("dashboard")} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 22, cursor: "pointer" }}>←</button>
         <h1 style={{ fontWeight: 700, fontSize: 18 }}>History</h1>
       </div>
-      <div style={{ maxWidth: 480, margin: "0 auto", padding: "16px" }}>
+      <div className="app-shell" style={{ padding: "16px" }}>
         {/* Tabs */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
           <button
@@ -27,7 +27,7 @@ export default function History() {
               flex: 1,
               padding: "12px",
               background: activeTab === "trades" ? "var(--accent)" : "var(--surface)",
-              color: activeTab === "trades" ? "white" : "var(--text-primary)",
+              color: activeTab === "trades" ? "var(--on-accent)" : "var(--text-primary)",
               border: activeTab === "trades" ? "none" : "1px solid var(--border)",
               borderRadius: "var(--radius)",
               fontSize: 14,
@@ -44,7 +44,7 @@ export default function History() {
               flex: 1,
               padding: "12px",
               background: activeTab === "transactions" ? "var(--accent)" : "var(--surface)",
-              color: activeTab === "transactions" ? "white" : "var(--text-primary)",
+              color: activeTab === "transactions" ? "var(--on-accent)" : "var(--text-primary)",
               border: activeTab === "transactions" ? "none" : "1px solid var(--border)",
               borderRadius: "var(--radius)",
               fontSize: 14,
@@ -127,7 +127,7 @@ export default function History() {
             ) : sortedTransactions.filter(tx => ["deposit","withdrawal"].includes(tx.type)).map(tx => (
               <div key={tx.id} style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 8, background: tx.type === "deposit" ? "var(--up-bg)" : "var(--down-bg)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 8, background: tx.status === "failed" ? "var(--surface-2)" : tx.type === "deposit" ? "var(--up-bg)" : "var(--down-bg)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>
                     {tx.type === "deposit" ? "↓" : "↑"}
                   </div>
                   <div>
@@ -135,8 +135,13 @@ export default function History() {
                     <p style={{ fontSize: 12, color: "var(--text-muted)" }}>{new Date(tx.time).toLocaleString()}</p>
                   </div>
                 </div>
-                <span style={{ fontWeight: 700, color: tx.type === "deposit" ? "var(--up)" : "var(--down)" }}>
-                  {tx.type === "deposit" ? "+" : "-"}${parseFloat(String(tx.amount)).toFixed(2)}
+                <span style={{ fontWeight: 700, textAlign: "right", color: tx.status === "failed" ? "var(--text-muted)" : tx.type === "deposit" ? "var(--up)" : "var(--down)" }}>
+                  {tx.status === "failed" ? "" : tx.type === "deposit" ? "+" : "-"}${parseFloat(String(tx.amount)).toFixed(2)}
+                  {tx.status !== "completed" && (
+                    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: tx.status === "failed" ? "var(--down)" : "var(--warning)", marginTop: 2 }}>
+                      {tx.status === "failed" ? "FAILED" : "PENDING"}
+                    </div>
+                  )}
                 </span>
               </div>
             ))}

@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { users } from "@/lib/schema";
 import { sendDepositEmail } from "@/lib/email";
 import { eq } from "drizzle-orm";
+import { getMinDepositUsd } from "@/lib/settings";
 
 const DEPOSIT_ADDRESS_KEY = "crypto:deposit:address";
 
@@ -82,6 +83,20 @@ export async function POST(request: NextRequest) {
     if (!txId || !amount || !userId) {
       return NextResponse.json({ error: "txId, amount, and userId are required" }, { status: 400 });
     }
+
+    const usd = parseFloat(amount);
+    if (!Number.isFinite(usd) || usd <= 0) {
+      return NextResponse.json({ error: "Amount must be a positive number" }, { status: 400 });
+    }
+
+    // Re-checked here because the deposit screen's gate is only a convenience.
+    const minDeposit = await getMinDepositUsd();
+    if (usd < minDeposit) {
+      return NextResponse.json(
+        { error: `Minimum deposit is $${minDeposit.toFixed(2)}` },
+        { status: 400 },
+      );
+    }
     
     const redis = getRedis();
     const depositAddress = await redis.get(DEPOSIT_ADDRESS_KEY);
@@ -96,7 +111,7 @@ export async function POST(request: NextRequest) {
       txId,
       JSON.stringify({
         txId,
-        amount: parseFloat(amount),
+        amount: usd,
         userId,
         timestamp: Date.now(),
         status: "pending",
@@ -113,7 +128,7 @@ export async function POST(request: NextRequest) {
         txId,
         JSON.stringify({
           txId,
-          amount: parseFloat(amount),
+          amount: usd,
           userId,
           timestamp: Date.now(),
           status: "verified",
@@ -123,7 +138,7 @@ export async function POST(request: NextRequest) {
       // Mark for balance update (handled by separate process)
       await redis.lpush("crypto:verified:queue", JSON.stringify({
         txId,
-        amount: parseFloat(amount),
+        amount: usd,
         userId,
         depositAddress,
       }));
@@ -136,7 +151,7 @@ export async function POST(request: NextRequest) {
           to: userResult[0].email,
           name: userResult[0].name,
           status: "failure",
-          amountUsd: parseFloat(amount),
+          amountUsd: usd,
           method: "USDT / Crypto",
           reference: txId,
           message: "Transaction not found or not confirmed yet",

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "../context/AppContext";
 
 const METHODS = [
@@ -8,7 +8,6 @@ const METHODS = [
   { id: "crypto", label: "USDT (TRC20)", icon: "🔐", min: 20, time: "~30 min" },
 ];
 
-const USD_TO_KES_RATE = 130; // Conversion rate
 
 export default function Withdraw() {
   const { balance, navigate, deductBalance, addTransaction } = useApp();
@@ -17,6 +16,15 @@ export default function Withdraw() {
   const [details, setDetails] = useState({ phone: "", account: "", wallet: "", bank: "", name: "" });
   const [step, setStep] = useState<"form"|"confirm"|"success">("form");
   const [loading, setLoading] = useState(false);
+  // Quoted by the server so the screen and the payout always agree.
+  const [usdToKesRate, setUsdToKesRate] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d?.usdToKesRate) setUsdToKesRate(d.usdToKesRate); })
+      .catch(err => console.error("Failed to load exchange rate:", err));
+  }, []);
 
   const numAmount = parseFloat(amount) || 0;
   const canSubmit = numAmount >= method.min && numAmount <= balance;
@@ -45,7 +53,7 @@ export default function Withdraw() {
           <p style={{ fontSize: 36, fontWeight: 700, fontFamily: "'DM Mono', monospace" }}>${numAmount.toFixed(2)}</p>
           <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 8 }}>via {method.label} · {method.time}</p>
         </div>
-        <button onClick={() => navigate("dashboard")} style={{ width: "100%", padding: "15px", background: "var(--accent)", color: "white", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+        <button onClick={() => navigate("dashboard")} style={{ width: "100%", padding: "15px", background: "var(--accent)", color: "var(--on-accent)", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
           Back to Dashboard
         </button>
       </div>
@@ -54,12 +62,12 @@ export default function Withdraw() {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
-      <div style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+      <div className="app-bar" style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", paddingTop: 14, paddingBottom: 14, display: "flex", alignItems: "center", gap: 12 }}>
         <button onClick={() => step === "confirm" ? setStep("form") : navigate("dashboard")} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 22, cursor: "pointer" }}>←</button>
         <h1 style={{ fontWeight: 700, fontSize: 18 }}>Withdraw Funds</h1>
       </div>
 
-      <div style={{ maxWidth: 480, margin: "0 auto", padding: "16px" }}>
+      <div className="app-shell" style={{ padding: "16px" }}>
         {/* Balance display */}
         <div style={{ background: "var(--surface)", borderRadius: "var(--radius)", border: "1px solid var(--border)", padding: "16px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
@@ -86,7 +94,7 @@ export default function Withdraw() {
                     <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Min ${m.min} · {m.time}</div>
                   </div>
                   <div style={{ width: 20, height: 20, borderRadius: "50%", border: `2px solid ${method.id === m.id ? "var(--accent)" : "var(--border)"}`, background: method.id === m.id ? "var(--accent)" : "transparent", position: "relative" }}>
-                    {method.id === m.id && <div style={{ position: "absolute", inset: 3, borderRadius: "50%", background: "white" }} />}
+                    {method.id === m.id && <div style={{ position: "absolute", inset: 3, borderRadius: "50%", background: "var(--on-accent)" }} />}
                   </div>
                 </div>
               ))}
@@ -111,8 +119,8 @@ export default function Withdraw() {
             {method.id === "mpesa" && numAmount > 0 && (
               <div style={{ background: "var(--accent-light)", borderRadius: "var(--radius)", border: "1px solid var(--accent)", padding: "14px", marginBottom: 14 }}>
                 <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>You will receive</p>
-                <p style={{ fontSize: 24, fontWeight: 700, color: "var(--accent)", fontFamily: "'DM Mono', monospace" }}>KES {(numAmount * USD_TO_KES_RATE).toFixed(0)}</p>
-                <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Exchange rate: 1 USD = {USD_TO_KES_RATE} KES</p>
+                <p style={{ fontSize: 24, fontWeight: 700, color: "var(--accent)", fontFamily: "'DM Mono', monospace" }}>KES {usdToKesRate ? (numAmount * usdToKesRate).toFixed(0) : "…"}</p>
+                <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Exchange rate: 1 USD = {usdToKesRate ?? "…"} KES</p>
               </div>
             )}
 
@@ -149,7 +157,7 @@ export default function Withdraw() {
             </div>
 
             <button onClick={() => canSubmit && setStep("confirm")} disabled={!canSubmit}
-              style={{ width: "100%", padding: "16px", background: canSubmit ? "var(--accent)" : "var(--border)", color: canSubmit ? "white" : "var(--text-muted)", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: canSubmit ? "pointer" : "not-allowed", fontFamily: "inherit" }}>
+              style={{ width: "100%", padding: "16px", background: canSubmit ? "var(--accent)" : "var(--border)", color: canSubmit ? "var(--on-accent)" : "var(--text-muted)", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: canSubmit ? "pointer" : "not-allowed", fontFamily: "inherit" }}>
               Continue
             </button>
           </>
@@ -169,7 +177,7 @@ export default function Withdraw() {
               ))}
             </div>
             <button onClick={handleWithdraw} disabled={loading}
-              style={{ width: "100%", padding: "16px", background: loading ? "var(--border)" : "var(--danger)", color: loading ? "var(--text-muted)" : "white", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", marginBottom: 10 }}>
+              style={{ width: "100%", padding: "16px", background: loading ? "var(--border)" : "var(--danger)", color: loading ? "var(--text-muted)" : "var(--on-accent)", border: "none", borderRadius: "var(--radius)", fontSize: 15, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", fontFamily: "inherit", marginBottom: 10 }}>
               {loading ? "Processing..." : `Confirm Withdrawal $${numAmount.toFixed(2)}`}
             </button>
             <p style={{ textAlign: "center", fontSize: 12, color: "var(--text-muted)" }}>🔒 Verified accounts only. Withdrawals are reviewed for security.</p>

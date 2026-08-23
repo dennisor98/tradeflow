@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 import DatabaseInit from "./components/DatabaseInit";
 import CryptoAddressInit from "./components/CryptoAddressInit";
+import { SESSION_CLOCK } from "@/lib/trading-session";
 
 export const metadata: Metadata = {
-  title: "TradeFlow — Crypto Trading",
-  description: "Professional crypto trading platform",
+  title: "Wintradein — Crypto Trading",
+  description: `Directional crypto trading on USDT pairs. Every session runs ${SESSION_CLOCK} and settles against your entry price.`,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

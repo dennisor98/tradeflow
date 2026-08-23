@@ -1,5 +1,6 @@
 "use client";
 import { useApp } from "../context/AppContext";
+import Logo from "./Logo";
 
 const assets = [
   { symbol: "EUR/USD", price: 1.0847, change: 0.0012, pct: 0.11 },
@@ -10,7 +11,10 @@ const assets = [
 ];
 
 export default function Dashboard() {
-  const { user, balance, trades, transactions, navigate, accountType, maxSingleDeposit } = useApp();
+  const { user, balance, trades, transactions, navigate, accountType, maxSingleDeposit, settings } = useApp();
+
+  // Whole dollars read better in copy; cents only appear when they exist.
+  const usd = (n: number) => `$${Number.isInteger(n) ? n.toLocaleString("en-US") : n.toFixed(2)}`;
   const wins = trades.filter(t => t.result === "win").length;
   const losses = trades.filter(t => t.result === "loss").length;
   const winRate = trades.length ? Math.round((wins / trades.length) * 100) : 0;
@@ -18,12 +22,10 @@ export default function Dashboard() {
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
       {/* Header */}
-      <div style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
+      <div className="app-bar" style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", paddingTop: 16, paddingBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 10, background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <svg width="18" height="18" fill="none" viewBox="0 0 36 36"><path d="M18 4L32 12V24L18 32L4 24V12L18 4Z" stroke="white" strokeWidth="2.5" fill="rgba(255,255,255,0.2)"/><path d="M12 20L16 24L24 14" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </div>
-          <span style={{ fontWeight: 700, fontSize: 18, letterSpacing: "-0.3px" }}>TradeFlow</span>
+          <Logo />
+          <span style={{ fontWeight: 700, fontSize: 18, letterSpacing: "-0.3px" }}>Wintradein</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--accent-light)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 600, color: "var(--accent)" }}>
@@ -32,13 +34,13 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 480, margin: "0 auto", padding: "20px 16px" }}>
+      <div className="app-shell" style={{ padding: "20px 16px" }}>
         {/* Account Type Badge */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div style={{ 
             padding: "6px 14px", 
             borderRadius: 20, 
-            background: accountType === "vvip" ? "linear-gradient(135deg, #FF00FF 0%, #8B00FF 100%)" : accountType === "vip" ? "linear-gradient(135deg, #FFD700 0%, #FFA500 100%)" : "var(--surface)",
+            background: accountType === "vvip" ? "linear-gradient(135deg, #1f8f5f 0%, #0d5f52 100%)" : accountType === "vip" ? "linear-gradient(135deg, #FFD700 0%, #FFA500 100%)" : "var(--surface)",
             border: accountType === "normal" ? "1px solid var(--border)" : "none",
             color: accountType === "normal" ? "var(--text-muted)" : "white",
             fontSize: 12, 
@@ -60,10 +62,10 @@ export default function Dashboard() {
           <p style={{ fontSize: 13, opacity: 0.75, marginBottom: 4, fontWeight: 500 }}>Available Balance</p>
           <p style={{ fontSize: 38, fontWeight: 700, letterSpacing: "-1px", marginBottom: 20 }}>${balance.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
           <div style={{ display: "flex", gap: 10 }}>
-            <button onClick={() => navigate("deposit")} style={{ flex: 1, padding: "11px", background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 10, color: "white", fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: "inherit", backdropFilter: "blur(8px)" }}>
+            <button onClick={() => navigate("deposit")} style={{ flex: 1, padding: "11px", background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.16)", borderRadius: 10, color: "white", fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: "inherit", backdropFilter: "blur(8px)" }}>
               + Deposit
             </button>
-            <button onClick={() => { console.log("Withdraw button clicked"); navigate("withdraw"); }} style={{ flex: 1, padding: "11px", background: "rgba(0,0,0,0.15)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10, color: "white", fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: "inherit" }}>
+            <button onClick={() => { console.log("Withdraw button clicked"); navigate("withdraw"); }} style={{ flex: 1, padding: "11px", background: "rgba(0,0,0,0.30)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 10, color: "white", fontWeight: 600, fontSize: 14, cursor: "pointer", fontFamily: "inherit" }}>
               Withdraw
             </button>
           </div>
@@ -72,11 +74,11 @@ export default function Dashboard() {
         {/* Upgrade to VIP Banner for Normal Accounts */}
         {accountType === "normal" && (
           <div style={{ 
-            background: "linear-gradient(135deg, #FFD700 0%, #FFA500 100%)", 
+            background: "linear-gradient(135deg, #d9a441 0%, #a9761d 100%)", 
             borderRadius: 16, 
             padding: "20px", 
             marginBottom: 20, 
-            color: "#8B4513", 
+            color: "#2a1c05", 
             position: "relative", 
             overflow: "hidden" 
           }}>
@@ -84,13 +86,17 @@ export default function Dashboard() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>👑 Upgrade to VIP</h3>
-                <p style={{ fontSize: 12, opacity: 0.85, marginBottom: 12 }}>Deposit $1000+ to unlock 50% win rate</p>
+                <p style={{ fontSize: 12, opacity: 0.85, marginBottom: 12 }}>
+                  {settings
+                    ? `Deposit ${usd(settings.vipThresholdUsd)}+ in one go and earn more on every win`
+                    : "Upgrade your account to earn more on every win"}
+                </p>
               </div>
               <button 
                 onClick={() => navigate("deposit")}
                 style={{ 
                   padding: "10px 20px", 
-                  background: "#8B4513", 
+                  background: "#2a1c05", 
                   color: "white", 
                   border: "none", 
                   borderRadius: 10, 
@@ -98,7 +104,7 @@ export default function Dashboard() {
                   fontSize: 13, 
                   cursor: "pointer",
                   fontFamily: "inherit",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.15)"
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.30)"
                 }}
               >
                 Upgrade Now
@@ -110,11 +116,11 @@ export default function Dashboard() {
         {/* Upgrade to VVIP Banner for VIP Accounts */}
         {accountType === "vip" && (
           <div style={{ 
-            background: "linear-gradient(135deg, #FF00FF 0%, #8B00FF 100%)", 
+            background: "linear-gradient(135deg, #1f8f5f 0%, #0d5f52 100%)", 
             borderRadius: 16, 
             padding: "20px", 
             marginBottom: 20, 
-            color: "#4B0082", 
+            color: "#04231a", 
             position: "relative", 
             overflow: "hidden" 
           }}>
@@ -122,13 +128,17 @@ export default function Dashboard() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>💎 Upgrade to VVIP</h3>
-                <p style={{ fontSize: 12, opacity: 0.85, marginBottom: 12 }}>Deposit $5000+ to unlock 70% win rate</p>
+                <p style={{ fontSize: 12, opacity: 0.85, marginBottom: 12 }}>
+                  {settings
+                    ? `Deposit ${usd(settings.vvipThresholdUsd)}+ in one go for our highest earnings`
+                    : "Upgrade your account to earn even more on every win"}
+                </p>
               </div>
               <button 
                 onClick={() => navigate("deposit")}
                 style={{ 
                   padding: "10px 20px", 
-                  background: "#4B0082", 
+                  background: "#04231a", 
                   color: "white", 
                   border: "none", 
                   borderRadius: 10, 
@@ -136,7 +146,7 @@ export default function Dashboard() {
                   fontSize: 13, 
                   cursor: "pointer",
                   fontFamily: "inherit",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.15)"
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.30)"
                 }}
               >
                 Upgrade Now
@@ -161,7 +171,7 @@ export default function Dashboard() {
         </div>
 
         {/* Trade Button */}
-        <button onClick={() => navigate("trade")} style={{ width: "100%", padding: "18px", background: "var(--accent)", color: "white", border: "none", borderRadius: "var(--radius)", fontSize: 16, fontWeight: 700, cursor: "pointer", marginBottom: 24, letterSpacing: "-0.2px", boxShadow: "0 4px 16px rgba(26,107,60,0.3)" }}>
+        <button onClick={() => navigate("trade")} style={{ width: "100%", padding: "18px", background: "var(--accent)", color: "var(--on-accent)", border: "none", borderRadius: "var(--radius)", fontSize: 16, fontWeight: 700, cursor: "pointer", marginBottom: 24, letterSpacing: "-0.2px", boxShadow: "0 4px 16px rgba(26,107,60,0.3)" }}>
           🚀 Start Trading
         </button>
 
@@ -212,8 +222,14 @@ export default function Dashboard() {
                   <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{new Date(tx.time).toLocaleDateString()}</div>
                 </div>
               </div>
-              <div style={{ fontWeight: 600, fontSize: 15, color: ["deposit","trade_win"].includes(tx.type) ? "var(--up)" : "var(--down)" }}>
-                {["deposit","trade_win"].includes(tx.type) ? "+" : "-"}${parseFloat(String(tx.amount)).toFixed(2)}
+              <div style={{ fontWeight: 600, fontSize: 15, textAlign: "right", color: tx.status === "failed" ? "var(--text-muted)" : ["deposit","trade_win"].includes(tx.type) ? "var(--up)" : "var(--down)" }}>
+                {/* A failed transfer moved no money, so it gets no +/- sign. */}
+                {tx.status === "failed" ? "" : ["deposit","trade_win"].includes(tx.type) ? "+" : "-"}${parseFloat(String(tx.amount)).toFixed(2)}
+                {tx.status !== "completed" && (
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: tx.status === "failed" ? "var(--down)" : "var(--warning)", marginTop: 2 }}>
+                    {tx.status === "failed" ? "FAILED" : "PENDING"}
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -224,7 +240,7 @@ export default function Dashboard() {
       </div>
 
       {/* Bottom Nav Bar */}
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--surface)", borderTop: "1px solid var(--border)", display: "flex", padding: "10px 0 20px" }}>
+      <div className="app-bar" style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--surface)", borderTop: "1px solid var(--border)", display: "flex", paddingTop: "10px", paddingBottom: "10px" }}>
         {[
           { icon: "🏠", label: "Home", screen: "dashboard" },
           { icon: "📈", label: "Trade", screen: "trade" },

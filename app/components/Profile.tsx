@@ -14,12 +14,12 @@ export default function Profile() {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
-      <div style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+      <div className="app-bar" style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)", paddingTop: 14, paddingBottom: 14, display: "flex", alignItems: "center", gap: 12 }}>
         <button onClick={() => navigate("dashboard")} style={{ background: "none", border: "none", color: "var(--text-secondary)", fontSize: 22, cursor: "pointer" }}>←</button>
         <h1 style={{ fontWeight: 700, fontSize: 18 }}>Profile</h1>
       </div>
 
-      <div style={{ maxWidth: 480, margin: "0 auto", padding: "16px" }}>
+      <div className="app-shell" style={{ padding: "16px" }}>
         {/* User Info Card */}
         <div style={{ background: "var(--surface)", borderRadius: "var(--radius-lg)", border: "1px solid var(--border)", padding: "24px", marginBottom: 16, textAlign: "center" }}>
           <div style={{ width: 80, height: 80, borderRadius: "50%", background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", fontSize: 32 }}>
@@ -41,7 +41,7 @@ export default function Profile() {
           
           <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0" }}>
             <span style={{ fontSize: 14, color: "var(--text-secondary)" }}>Account Type</span>
-            <span style={{ fontSize: 14, fontWeight: 600, color: accountType === "vvip" ? "#FFD700" : accountType === "vip" ? "#C0C0C0" : "var(--text-primary)" }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: accountType === "vvip" ? "var(--gold)" : accountType === "vip" ? "var(--text-secondary)" : "var(--text-primary)" }}>
               {accountType === "vvip" ? "💎 VVIP" : accountType === "vip" ? "👑 VIP" : "Normal"}
             </span>
           </div>
@@ -54,9 +54,13 @@ export default function Profile() {
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
             <span style={{ fontSize: 20 }}>📊</span>
             <div>
-              <p style={{ fontSize: 14, fontWeight: 500 }}>Win Rate</p>
+              <p style={{ fontSize: 14, fontWeight: 500 }}>Session earnings</p>
               <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                {accountType === "vvip" ? "70%" : accountType === "vip" ? "50%" : "30%"}
+                {accountType === "vvip"
+                  ? "Our highest — you earn the most we offer on a winning session."
+                  : accountType === "vip"
+                  ? "Boosted above a Normal account. Upgrade to VVIP to earn more still."
+                  : "Standard. Upgrade to VIP or VVIP to earn more on every win."}
               </p>
             </div>
           </div>

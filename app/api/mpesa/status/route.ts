@@ -1,13 +1,23 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { mpesaTransactions } from '@/lib/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
+import { STK_RESULT_MEANINGS, logMpesa, queryStkStatus } from '@/lib/mpesa';
+import { settleMpesaTransaction } from '@/lib/mpesa-settlement';
 
-const MPESA_CONSUMER_KEY = 'jJJNi8StDAUxA2ceMQX4quIlaHoZMDNyVBHGTHLtRDUGsxvz';
-const MPESA_CONSUMER_SECRET = 'sG7eaonKJPvTZqAxNsPyPuAuRAKOTlMBR3oP3hxB7OdAKvKt5R11QkJ6SRp7NDIk';
-const MPESA_ENV = process.env.MPESA_ENV || 'sandbox';
+/** Daraja should not be queried on every client tick. */
+const MIN_QUERY_INTERVAL_SECONDS = 6;
+/** After this long with no verdict, tell the UI to stop expecting one shortly. */
+const STALE_SECONDS = 180;
 
-// Get transaction status from database
+/**
+ * Status of an M-Pesa deposit.
+ *
+ * While the transaction is pending this actively asks Safaricom what happened
+ * rather than waiting for the callback, and settles the transaction from that
+ * answer. The callback is only needed afterwards to supply the M-Pesa receipt
+ * number, which the query API does not return.
+ */
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -17,81 +27,139 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Transaction ID required' }, { status: 400 });
     }
 
-    const transaction = await db.select().from(mpesaTransactions).where(eq(mpesaTransactions.id, transactionId)).limit(1);
+    // All time arithmetic is done by MySQL. Drizzle serialises a JS Date to
+    // UTC while the database clock is East Africa Time, so mixing the two in a
+    // comparison silently made every row look hours old and disabled the
+    // throttle entirely. Reading and writing the instant in SQL avoids that.
+    const rows = await db
+      .select({
+        tx: mpesaTransactions,
+        ageSeconds: sql<number>`timestampdiff(second, ${mpesaTransactions.createdAt}, now())`,
+        sinceLastQuerySeconds: sql<
+          number | null
+        >`timestampdiff(second, ${mpesaTransactions.lastQueriedAt}, now())`,
+      })
+      .from(mpesaTransactions)
+      .where(eq(mpesaTransactions.id, transactionId))
+      .limit(1);
+    const row = rows[0];
 
-    if (transaction.length === 0) {
-      return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
+    if (!row) return NextResponse.json({ error: 'Transaction not found' }, { status: 404 });
+
+    const tx = row.tx;
+    if (tx.status !== 'pending') {
+      return NextResponse.json({
+        status: tx.status,
+        message: tx.resultDesc || undefined,
+        mpesaReceiptNumber: tx.mpesaReceiptNumber || undefined,
+      });
     }
 
-    const tx = transaction[0];
-    return NextResponse.json({
-      status: tx.status,
-      message: tx.resultDesc || undefined,
+    const stale = Number(row.ageSeconds ?? 0) > STALE_SECONDS;
+
+    // Claim this poll slot before calling out, so concurrent workers don't all
+    // query Safaricom for the same transaction at once. The conditional UPDATE
+    // is what actually enforces the interval; only the worker whose UPDATE
+    // matched a row goes on to contact Daraja.
+    const claim = await db
+      .update(mpesaTransactions)
+      .set({ lastQueriedAt: sql`now()`, queryCount: sql`${mpesaTransactions.queryCount} + 1` })
+      .where(
+        sql`${mpesaTransactions.id} = ${transactionId}
+            and ${mpesaTransactions.status} = 'pending'
+            and (${mpesaTransactions.lastQueriedAt} is null
+                 or ${mpesaTransactions.lastQueriedAt} <= date_sub(now(), interval ${MIN_QUERY_INTERVAL_SECONDS} second))`
+      );
+
+    if (((claim as unknown as [{ affectedRows: number }])[0]?.affectedRows ?? 0) === 0) {
+      return NextResponse.json({ status: 'pending', stale, polled: false });
+    }
+
+    let outcome;
+    try {
+      outcome = await queryStkStatus(tx.checkoutRequestID);
+    } catch (error) {
+      // A query failure must not fail the poll; the transaction stays pending
+      // and the next tick tries again.
+      logMpesa('poll.error', { transactionId, message: error instanceof Error ? error.message : String(error) });
+      return NextResponse.json({ status: 'pending', stale, polled: true });
+    }
+
+    logMpesa('poll.result', {
+      transactionId,
+      checkoutRequestID: tx.checkoutRequestID,
+      queryCount: tx.queryCount + 1,
+      ageSeconds: Number(row.ageSeconds ?? 0),
+      state: outcome.state,
+      resultCode: outcome.resultCode,
+      resultDesc: outcome.resultDesc,
+      httpStatus: outcome.httpStatus,
+      raw: outcome.raw,
     });
+
+    if (outcome.state === 'success' || outcome.state === 'failed') {
+      const meaning = outcome.resultCode ? STK_RESULT_MEANINGS[outcome.resultCode] : undefined;
+      await settleMpesaTransaction({
+        transactionId: tx.id,
+        outcome: outcome.state === 'success' ? 'completed' : 'failed',
+        resultCode: outcome.resultCode,
+        resultDesc: meaning ?? outcome.resultDesc,
+        source: 'poll',
+      });
+
+      return NextResponse.json({
+        status: outcome.state === 'success' ? 'completed' : 'failed',
+        message: meaning ?? outcome.resultDesc,
+        settledBy: 'poll',
+      });
+    }
+
+    return NextResponse.json({ status: 'pending', stale, polled: true });
   } catch (error) {
     console.error('Status check error:', error);
     return NextResponse.json({ error: 'Status check failed' }, { status: 500 });
   }
 }
 
-// Get OAuth token
-async function getMpesaToken(): Promise<string> {
-  const auth = Buffer.from(`${MPESA_CONSUMER_KEY}:${MPESA_CONSUMER_SECRET}`).toString('base64');
-  const response = await fetch(
-    `https://${MPESA_ENV}.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials`,
-    {
-      headers: {
-        Authorization: `Basic ${auth}`,
-      },
-    }
-  );
-  const data = await response.json();
-  return data.access_token;
-}
-
-// Check STK push status from M-Pesa API (optional - for manual checking)
+/** Manual reconcile for a specific CheckoutRequestID. */
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { checkoutRequestID } = body;
-
+    const { checkoutRequestID } = await request.json();
     if (!checkoutRequestID) {
       return NextResponse.json({ error: 'CheckoutRequestID required' }, { status: 400 });
     }
 
-    // Get OAuth token
-    const token = await getMpesaToken();
+    const outcome = await queryStkStatus(checkoutRequestID);
+    logMpesa('query.manual', { checkoutRequestID, ...outcome });
 
-    // Check status
-    const response = await fetch(
-      `https://${MPESA_ENV}.safaricom.co.ke/mpesa/stkpushquery/v1/query`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          BusinessShortCode: process.env.MPESA_SHORTCODE || '174379',
-          Password: '', // You'll need to generate this with timestamp
-          Timestamp: '', // Current timestamp
-          CheckoutRequestID: checkoutRequestID,
-        }),
-      }
-    );
+    const rows = await db
+      .select()
+      .from(mpesaTransactions)
+      .where(eq(mpesaTransactions.checkoutRequestID, checkoutRequestID))
+      .limit(1);
 
-    const data = await response.json();
-
-    if (response.ok) {
-      return NextResponse.json({
-        success: true,
-        data,
+    if (rows[0] && (outcome.state === 'success' || outcome.state === 'failed')) {
+      await settleMpesaTransaction({
+        transactionId: rows[0].id,
+        outcome: outcome.state === 'success' ? 'completed' : 'failed',
+        resultCode: outcome.resultCode,
+        resultDesc: (outcome.resultCode && STK_RESULT_MEANINGS[outcome.resultCode]) ?? outcome.resultDesc,
+        source: 'poll',
       });
-    } else {
-      return NextResponse.json({ error: data.errorMessage || 'Status check failed' }, { status: 400 });
     }
+
+    return NextResponse.json({
+      success: true,
+      state: outcome.state,
+      resultCode: outcome.resultCode,
+      meaning: outcome.resultCode ? STK_RESULT_MEANINGS[outcome.resultCode] : undefined,
+      resultDesc: outcome.resultDesc,
+    });
   } catch (error) {
     console.error('Status check error:', error);
-    return NextResponse.json({ error: 'Status check failed' }, { status: 500 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Status check failed' },
+      { status: 500 }
+    );
   }
 }

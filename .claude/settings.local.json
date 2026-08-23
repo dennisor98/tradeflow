@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx next *)",
+      "Bash(npx eslint *)",
+      "Bash(node -p \"require\\('/home/servia/drprojects/tradeflow/node_modules/next/package.json'\\).version\")",
+      "mcp__plugin_chrome-devtools-mcp_chrome-devtools__new_page",
+      "Bash(mkdir -p ~/tf-shots)",
+      "Bash(chromium --headless --disable-gpu --hide-scrollbars --window-size=430,932 --screenshot=/home/servia/tf-shots/home-mobile.png --virtual-time-budget=6000 http://localhost:3111/)",
+      "Bash(chromium --headless --disable-gpu --hide-scrollbars --window-size=430,932 --screenshot=/home/servia/tf-shots/full.png --virtual-time-budget=8000 --screenshot-full-page http://localhost:3111/)",
+      "Bash(python3 -c ' *)",
+      "Bash(chromium --headless --disable-gpu --hide-scrollbars --window-size=430,1000 --screenshot=/home/servia/tf-shots/hero2.png --virtual-time-budget=7000 http://localhost:3111/)",
+      "Bash(cat)",
+      "Bash(chromium --headless --disable-gpu --hide-scrollbars --window-size=430,2600 --screenshot=/home/servia/tf-shots/tall.png --virtual-time-budget=7000 http://localhost:3111/)",
+      "Bash(chromium --headless --disable-gpu --hide-scrollbars --window-size=1280,900 --screenshot=/home/servia/tf-shots/desktop.png --virtual-time-budget=7000 http://localhost:3111/)",
+      "Bash(chromium --headless --disable-gpu --hide-scrollbars --window-size=360,780 --screenshot=/home/servia/tf-shots/small.png --virtual-time-budget=7000 http://localhost:3111/)"
+    ]
+  }
+}

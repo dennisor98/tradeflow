@@ -1,204 +1,116 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { mpesaTransactions, transactions, users } from '@/lib/schema';
+import { mpesaTransactions } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
-import { sendDepositEmail } from '@/lib/email';
+import { STK_RESULT_MEANINGS, logMpesa } from '@/lib/mpesa';
+import { attachReceiptNumber, settleMpesaTransaction } from '@/lib/mpesa-settlement';
 
-const USD_TO_KES_RATE = 130; // Conversion rate
+type MpesaCallbackItem = { Name: string; Value?: string | number };
 
-type MpesaCallbackItem = {
-  Name: string;
-  Value?: string | number;
-};
-
-function getCallbackValue(items: MpesaCallbackItem[], name: string) {
-  const value = items.find((item) => item.Name === name)?.Value;
+function getCallbackValue(items: MpesaCallbackItem[] | undefined, name: string) {
+  const value = items?.find(item => item.Name === name)?.Value;
   return value === undefined ? undefined : String(value);
 }
 
-async function ensureDepositHistory(input: {
-  id: string;
-  userId: string;
-  amountUsd: number;
-  mpesaReceiptNumber?: string | null;
-}) {
-  const existingHistory = await db.select()
-    .from(transactions)
-    .where(eq(transactions.id, input.id))
-    .limit(1);
-
-  if (existingHistory.length > 0) return;
-
-  await db.insert(transactions).values({
-    id: input.id,
-    userId: input.userId,
-    type: 'deposit',
-    amount: input.amountUsd.toFixed(2),
-    status: 'completed',
-    label: input.mpesaReceiptNumber
-      ? `M-Pesa Deposit (${input.mpesaReceiptNumber})`
-      : 'M-Pesa Deposit',
-    time: Date.now(),
-  });
-}
-
-// M-Pesa callback endpoint
+/**
+ * M-Pesa callback.
+ *
+ * Settlement is normally done by polling the STK query API (see
+ * app/api/mpesa/status), so this callback's main job is to record the M-Pesa
+ * receipt number, which the query API never returns.
+ *
+ * It still settles a transaction that is somehow *also* still pending — that
+ * happens when nobody polled, typically because the customer closed the
+ * browser right after paying. Dropping that case would take a payment and
+ * never credit it. settleMpesaTransaction() claims the row atomically, so this
+ * cannot double-credit alongside the poller.
+ */
 export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    console.log('M-Pesa Callback received:', JSON.stringify(body, null, 2));
+  const raw = await request.text();
+  logMpesa('callback.received', { bytes: raw.length, rawBody: raw.slice(0, 1200) || '(empty)' });
 
-    const { Body } = body;
-    const { stkCallback } = Body;
+  try {
+    const body = JSON.parse(raw);
+    const stkCallback = body?.Body?.stkCallback;
+
+    if (!stkCallback?.CheckoutRequestID) {
+      logMpesa('callback.malformed', { reason: 'no CheckoutRequestID in payload' });
+      return NextResponse.json({ ResultCode: 0, ResultDesc: 'Accepted' });
+    }
+
     const { CheckoutRequestID, ResultCode, ResultDesc, CallbackMetadata } = stkCallback;
     const resultCode = String(ResultCode);
+    const succeeded = resultCode === '0';
 
-    if (resultCode === '0') {
-      // Transaction successful
-      const callbackItems = CallbackMetadata.Item as MpesaCallbackItem[];
-      const amount = getCallbackValue(callbackItems, 'Amount');
-      const mpesaReceiptNumber = getCallbackValue(callbackItems, 'MpesaReceiptNumber');
-      const transactionDate = getCallbackValue(callbackItems, 'TransactionDate');
-      const phoneNumber = getCallbackValue(callbackItems, 'PhoneNumber');
+    const items = CallbackMetadata?.Item as MpesaCallbackItem[] | undefined;
+    const mpesaReceiptNumber = getCallbackValue(items, 'MpesaReceiptNumber');
+    const transactionDate = getCallbackValue(items, 'TransactionDate');
+    const phoneNumber = getCallbackValue(items, 'PhoneNumber');
 
-      console.log('Successful M-Pesa transaction:', {
-        CheckoutRequestID,
-        amount,
+    logMpesa(succeeded ? 'callback.success' : 'callback.failed', {
+      checkoutRequestID: CheckoutRequestID,
+      resultCode,
+      resultDesc: ResultDesc,
+      meaning: STK_RESULT_MEANINGS[resultCode],
+      mpesaReceiptNumber,
+      phoneNumber: phoneNumber ? `${phoneNumber.slice(0, 6)}***${phoneNumber.slice(-3)}` : undefined,
+    });
+
+    const rows = await db
+      .select()
+      .from(mpesaTransactions)
+      .where(eq(mpesaTransactions.checkoutRequestID, CheckoutRequestID))
+      .limit(1);
+    const tx = rows[0];
+
+    if (!tx) {
+      logMpesa('callback.unknown-transaction', { checkoutRequestID: CheckoutRequestID });
+      return NextResponse.json({ ResultCode: 0, ResultDesc: 'Accepted' });
+    }
+
+    // Safaricom says this was paid but we had already written it off. That
+    // happens if a still-processing reply was misread as a verdict. Credit the
+    // customer rather than leaving them out of pocket.
+    const needsRecovery = succeeded && tx.status === 'failed';
+
+    if (tx.status === 'pending' || needsRecovery) {
+      // Poller never got there. Settle from the callback instead.
+      const result = await settleMpesaTransaction({
+        transactionId: tx.id,
+        outcome: succeeded ? 'completed' : 'failed',
+        resultCode,
+        resultDesc: STK_RESULT_MEANINGS[resultCode] ?? ResultDesc,
         mpesaReceiptNumber,
-        phoneNumber,
+        transactionDate,
+        source: 'callback',
+        fromStatuses: needsRecovery ? ['pending', 'failed'] : ['pending'],
       });
-
-      // Update transaction status in database
-      const existingTransaction = await db.select().from(mpesaTransactions).where(eq(mpesaTransactions.checkoutRequestID, CheckoutRequestID)).limit(1);
-
-      if (existingTransaction.length > 0) {
-        const transaction = existingTransaction[0];
-
-        if (transaction.status === 'completed') {
-          return NextResponse.json({
-            ResultCode: 0,
-            ResultDesc: 'Success',
-            ThirdPartyTransID: transaction.mpesaReceiptNumber,
-          });
-        }
-        
-        // Update transaction status
-        await db.update(mpesaTransactions)
-          .set({
-            status: 'completed',
-            resultCode,
-            resultDesc: ResultDesc,
-            mpesaReceiptNumber,
-            transactionDate,
-          })
-          .where(eq(mpesaTransactions.id, transaction.id));
-
-        // Convert KES to USD and credit user balance
-        const kesAmount = parseFloat(amount || '0');
-        const usdAmount = kesAmount / USD_TO_KES_RATE;
-        
-        // Get current user balance
-        const userResult = await db.select().from(users).where(eq(users.id, transaction.userId)).limit(1);
-        
-        if (userResult.length > 0) {
-          const user = userResult[0];
-          const currentBalance = parseFloat(user.balance as string);
-          const newBalance = currentBalance + usdAmount;
-          const currentMaxDeposit = parseFloat(user.maxSingleDeposit?.toString() || '0');
-          const newMaxDeposit = Math.max(currentMaxDeposit, usdAmount);
-          const userUpdates: {
-            balance: string;
-            maxSingleDeposit: string;
-            accountType?: string;
-          } = {
-            balance: newBalance.toFixed(2),
-            maxSingleDeposit: newMaxDeposit.toFixed(2),
-          };
-
-          if (newMaxDeposit >= 5000 && user.accountType !== 'vvip') {
-            userUpdates.accountType = 'vvip';
-          } else if (newMaxDeposit >= 1000 && user.accountType === 'normal') {
-            userUpdates.accountType = 'vip';
-          }
-          
-          await db.update(users)
-            .set(userUpdates)
-            .where(eq(users.id, transaction.userId));
-
-          await ensureDepositHistory({
-            id: transaction.id,
-            userId: transaction.userId,
-            amountUsd: usdAmount,
-            mpesaReceiptNumber,
-          });
-
-          await sendDepositEmail({
-            to: user.email,
-            name: user.name,
-            status: 'success',
-            amountUsd: usdAmount,
-            amountKes: kesAmount,
-            method: 'M-Pesa',
-            reference: mpesaReceiptNumber,
-          });
-        }
-      }
-
-      return NextResponse.json({
-        ResultCode: 0,
-        ResultDesc: 'Success',
-        ThirdPartyTransID: mpesaReceiptNumber,
+      logMpesa(needsRecovery ? 'callback.recovered' : 'callback.settled', {
+        checkoutRequestID: CheckoutRequestID,
+        previousStatus: tx.status,
+        ...result,
       });
     } else {
-      // Transaction failed
-      console.log('Failed M-Pesa transaction:', {
-        CheckoutRequestID,
-        ResultCode,
-        ResultDesc,
+      // Already settled by the poller — this is the receipt number arriving.
+      await attachReceiptNumber({
+        checkoutRequestID: CheckoutRequestID,
+        mpesaReceiptNumber,
+        transactionDate,
+        resultCode,
+        resultDesc: STK_RESULT_MEANINGS[resultCode] ?? ResultDesc,
       });
-
-      // Update transaction status to failed in database
-      const existingTransaction = await db.select().from(mpesaTransactions).where(eq(mpesaTransactions.checkoutRequestID, CheckoutRequestID)).limit(1);
-
-      if (existingTransaction.length > 0) {
-        const transaction = existingTransaction[0];
-
-        if (transaction.status === 'failed') {
-          return NextResponse.json({
-            ResultCode: ResultCode,
-            ResultDesc: ResultDesc,
-          });
-        }
-
-        await db.update(mpesaTransactions)
-          .set({
-            status: 'failed',
-            resultCode,
-            resultDesc: ResultDesc,
-          })
-          .where(eq(mpesaTransactions.id, transaction.id));
-
-        const userResult = await db.select().from(users).where(eq(users.id, transaction.userId)).limit(1);
-        if (userResult.length > 0) {
-          await sendDepositEmail({
-            to: userResult[0].email,
-            name: userResult[0].name,
-            status: 'failure',
-            amountKes: parseFloat(transaction.amount as string),
-            method: 'M-Pesa',
-            reference: CheckoutRequestID,
-            message: ResultDesc,
-          });
-        }
-      }
-
-      return NextResponse.json({
-        ResultCode: ResultCode,
-        ResultDesc: ResultDesc,
+      logMpesa('callback.receipt-attached', {
+        checkoutRequestID: CheckoutRequestID,
+        mpesaReceiptNumber,
+        transactionStatus: tx.status,
       });
     }
+
+    // Always acknowledge, otherwise Safaricom retries.
+    return NextResponse.json({ ResultCode: 0, ResultDesc: 'Accepted' });
   } catch (error) {
+    logMpesa('callback.error', { message: error instanceof Error ? error.message : String(error) });
     console.error('M-Pesa callback error:', error);
-    return NextResponse.json({ error: 'Callback processing failed' }, { status: 500 });
+    return NextResponse.json({ ResultCode: 0, ResultDesc: 'Accepted' });
   }
 }

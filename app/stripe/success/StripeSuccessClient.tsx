@@ -70,8 +70,8 @@ export default function StripeSuccessClient() {
         <div style={{ maxWidth: 480, width: "100%", textAlign: "center", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", padding: 24 }}>
           <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 10 }}>Payment confirmation failed</h1>
           <p style={{ color: "var(--text-secondary)", marginBottom: 20 }}>{error}</p>
-          <Link href="/" style={{ display: "inline-block", padding: "12px 18px", background: "var(--accent)", color: "white", borderRadius: "var(--radius)", textDecoration: "none", fontWeight: 600 }}>
-            Return to TradeFlow
+          <Link href="/" style={{ display: "inline-block", padding: "12px 18px", background: "var(--accent)", color: "var(--on-accent)", borderRadius: "var(--radius)", textDecoration: "none", fontWeight: 600 }}>
+            Return to Wintradein
           </Link>
         </div>
       </div>
@@ -84,15 +84,15 @@ export default function StripeSuccessClient() {
         <div style={{ width: 80, height: 80, borderRadius: "50%", background: "var(--up-bg)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px", fontSize: 36 }}>✓</div>
         <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Payment successful</h1>
         <p style={{ color: "var(--text-secondary)", marginBottom: 12 }}>
-          {alreadyProcessed ? "This Stripe payment was already applied to your account." : "Your Stripe payment has been applied to your TradeFlow account."}
+          {alreadyProcessed ? "This Stripe payment was already applied to your account." : "Your Stripe payment has been applied to your Wintradein account."}
         </p>
         {amountUsd !== null && (
           <p style={{ fontSize: 20, fontWeight: 700, marginBottom: 20, color: "var(--up)" }}>
             ${amountUsd.toFixed(2)} credited
           </p>
         )}
-        <Link href="/" style={{ display: "inline-block", padding: "12px 18px", background: "var(--accent)", color: "white", borderRadius: "var(--radius)", textDecoration: "none", fontWeight: 600 }}>
-          Back to TradeFlow
+        <Link href="/" style={{ display: "inline-block", padding: "12px 18px", background: "var(--accent)", color: "var(--on-accent)", borderRadius: "var(--radius)", textDecoration: "none", fontWeight: 600 }}>
+          Back to Wintradein
         </Link>
       </div>
     </div>

@@ -32,8 +32,8 @@ export async function POST(request: Request) {
           price_data: {
             currency: 'usd',
             product_data: {
-              name: 'TradeFlow Account Deposit',
-              description: `Deposit $${amount.toFixed(2)} into your TradeFlow wallet`,
+              name: 'Wintradein Account Deposit',
+              description: `Deposit $${amount.toFixed(2)} into your Wintradein wallet`,
             },
             unit_amount: Math.round(amount * 100),
           },

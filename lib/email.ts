@@ -50,7 +50,7 @@ function buildDepositEmail(input: DepositEmailInput) {
       <h2>${title}</h2>
       <p>${greeting}</p>
       <p>${isSuccess
-        ? 'Your deposit has been received and credited to your TradeFlow account.'
+        ? 'Your deposit has been received and credited to your Wintradein account.'
         : 'Your deposit could not be completed.'}</p>
       ${isSuccess ? creditedLine : amountLine ? `<p><strong>Amount:</strong> ${amountLine}</p>` : ''}
       ${paidLine}
@@ -65,7 +65,7 @@ function buildDepositEmail(input: DepositEmailInput) {
     '',
     greeting,
     isSuccess
-      ? 'Your deposit has been received and credited to your TradeFlow account.'
+      ? 'Your deposit has been received and credited to your Wintradein account.'
       : 'Your deposit could not be completed.',
     isSuccess && usdAmount ? `Amount credited: ${usdAmount}` : null,
     kesAmount ? `M-Pesa amount: ${kesAmount}` : null,
@@ -76,7 +76,7 @@ function buildDepositEmail(input: DepositEmailInput) {
   ].filter(Boolean).join('\n');
 
   return {
-    subject: `TradeFlow ${title}`,
+    subject: `Wintradein ${title}`,
     html,
     text,
   };
@@ -90,10 +90,10 @@ function buildOtpEmail(input: {
 }) {
   const greeting = input.name ? `Hello ${input.name},` : 'Hello,';
   const isLogin = input.purpose === 'login';
-  const title = isLogin ? 'Login verification code' : 'Verify your TradeFlow account';
+  const title = isLogin ? 'Login verification code' : 'Verify your Wintradein account';
   const intro = isLogin
     ? 'Use the code below to complete your login.'
-    : 'Use the code below to activate your TradeFlow account.';
+    : 'Use the code below to activate your Wintradein account.';
 
   const html = `
     <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
@@ -119,7 +119,7 @@ function buildOtpEmail(input: {
   ].join('\n');
 
   return {
-    subject: `TradeFlow ${title}`,
+    subject: `Wintradein ${title}`,
     html,
     text,
   };
